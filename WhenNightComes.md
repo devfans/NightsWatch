@@ -1,4 +1,4 @@
-#### When night comes, we start to watch with a brave and clear mind:
+#### When night comes, we start to watch with a brave heart and a clear mind:
 
 We would want design simple enough, no one want to spend much on learning how to use a monitoring tool. So, just two roles \
 the server and the agent.
