@@ -11,7 +11,7 @@ We would want the design simple enough but still powerful. No one wants to spend
 
 ## What does a agent do?
 + Load the watch targets from the configuration file
-+ Follow the instruction to stare at targets, or which an interval for nap time.
++ Follow the instruction to stare at targets, or with an interval for nap time.
 + Report the data into the server
 
 
