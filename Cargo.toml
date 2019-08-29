@@ -1,0 +1,19 @@
+[package]
+name = "NightsWatch"
+version = "0.1.0"
+authors = ["devfans <stefanliu@outlook.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[bin]]
+name = "nw-castle-black"
+path = "src/castle-black.rs"
+
+[[bin]]
+name = "nw-ranger"
+path = "src/agent.rs"
+
+
+[dependencies]
+serde_json = "1.0"
