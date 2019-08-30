@@ -1,6 +1,9 @@
 use std::sync::{Arc, Weak, RwLock};
-use serde_json;
+
+use serde_json::Value;
+use crate::utils::*;
 use crate::utils;
+use std::collections::HashMap;
 
 pub enum NodeType {
     Application,
@@ -13,46 +16,110 @@ pub enum HealthCheckType {
     Event,
 }
 
+pub type Node = RwLock<NodeProto>;
+pub type NodeStore = HashMap<u64, Arc<Node>>;
+pub type NodeQ = Vec<Weak<Node>>;
+
+pub struct StoreProto {
+    id: u64,
+    store: NodeStore,
+}
+
+impl StoreProto {
+    pub fn new() -> Arc<Store> {
+        Arc::new(RwLock::new(StoreProto {
+            id: 0,
+            store: HashMap::new(),
+        }))
+    }
+}
+
+pub type Store = RwLock<StoreProto>;
+
 pub struct NodeProto {
-    node_type: NodeType,
-    name: String,
-    display_name: String,
-    description: String,
-    node_created: u64,
+    pub id: u64,
+    pub node_type: NodeType,
+    pub name: String,
+    pub display_name: String,
+    pub description: String,
+    pub node_created: u64,
 
-    metric_enabled: bool,
+    pub metric_enabled: bool,
 
-    parents: Vec<Weak<RwLock<NodeProto>>>,
-    children: Vec<Weak<RwLock<NodeProto>>>,
+    pub parents: Vec<Weak<Node>>,
+    pub children: Vec<Weak<Node>>,
     
-    alert_enabled: bool,
-    alert_description: String,
-    alert_severity_eval: Option<String>,
+    pub alert_enabled: bool,
+    pub alert_description: String,
+    pub alert_severity_eval: Option<String>,
 
-    health_status: u8,
-    health_check_eval: Option<String>,
-    health_check_type: HealthCheckType,
-    health_event_enabled: bool,
-    health_check_init: bool,
-    health_check_source: Weak<RwLock<NodeProto>>,
+    pub health_status: u8,
+    pub health_check_eval: Option<String>,
+    pub health_check_type: HealthCheckType,
+    pub health_event_enabled: bool,
+    pub health_check_init: bool,
+    pub health_check_source: Weak<Node>,
 
-    health_check_tick: u64,
-    health_last_check: u64,
-    health_last_report: u64,
-    health_last_change: u64,
+    pub health_check_tick: u64,
+    pub health_last_check: u64,
+    pub health_last_report: u64,
+    pub health_last_change: u64,
 }
 
 impl NodeProto {
-    pub fn new() -> Arc<RwLock<NodeProto>> {
-        Arc::new(RwLock::new(NodeProto {
+    pub fn add_parent(&mut self, node: Weak<Node>) {
+        self.parents.push(node);
+    }
+
+    pub fn add_child(&mut self, node: Weak<Node>) {
+        self.children.push(node);
+    }
+
+    pub fn calculate_health(&mut self) {
+        // default script to check health status of the node
+        let mut count: u32 = 0;
+        let mut amount: u32 = 0;
+        for node in self.children.iter() {
+            if let Some(child_node) = node.upgrade() {
+                let child = child_node.read().unwrap();
+                count += 1;
+                amount += child.health_status as u32;
+            }
+        }
+        self.health_status = (amount / count) as u8;
+        self.health_last_check = utils::now();
+    }
+
+    pub fn tick(&mut self, tick: u64) {
+        if self.health_check_tick > tick {
+            panic!("Unexpected check tick of node");
+        } else if self.health_check_tick < tick {
+            self.health_check_tick = tick;
+            self.calculate_health();
+        }
+    }
+}
+
+pub trait StoreOps {
+    fn new_node(&mut self) -> Arc<Node>;
+    fn add_node(&mut self, raw: &Value, name: String) -> Arc<Node>;
+    fn add_app_node(&mut self, raw: &Value) -> Arc<Node>;
+}
+
+impl StoreOps for Arc<Store> {
+    fn new_node(&mut self) -> Arc<Node> {
+        let mut node = NodeProto {
+            id: 0,
             node_type: NodeType::Node,
             name: String::new(),
             display_name: String::new(),
             description: String::new(),
             node_created: utils::now(),
             metric_enabled: true,
+
             parents: Vec::new(),
             children: Vec::new(),
+
             alert_enabled: true,
             alert_description: String::new(),
             alert_severity_eval: None,
@@ -67,15 +134,40 @@ impl NodeProto {
             health_last_check: 0,
             health_last_report: 0,
             health_last_change: 0,
-        }))
+        };
+        let mut store = self.write().unwrap();
+        let id = store.id;
+        node.id = id;
+        store.id += 1;
+        let new_node = Arc::new(RwLock::new(node));
+        store.store.insert(id, new_node.clone());
+        new_node
     }
-    pub fn parse_node(raw: serde_json::Value) -> Arc<RwLock<NodeProto>> {
-        return NodeProto::new();
+    fn add_node(&mut self, raw: &Value, name: String) -> Arc<Node> {
+        let mut node = self.new_node();
+        {
+            let mut state = node.write().unwrap();
+            state.name = name;
+            state.display_name = raw.get_str("display_name", "new node");
+            state.description = raw.get_str("description", "");
+            state.alert_enabled = raw.get_bool("alert_enabled", true);
+            state.alert_description = raw.get_str("alert_description", "");
+            state.health_event_enabled = raw.get_bool("health_event_enabled", true);
+            
+            state.metric_enabled = raw.get_bool("metric_enabled", true);
+            state.node_type = NodeType::Node;
+        }
+        node
     }
 
-    pub fn parse_app_node(raw: serde_json::Value) -> Arc<RwLock<NodeProto>> {
-        return NodeProto::new();
+    fn add_app_node(&mut self, raw: &serde_json::Value) -> Arc<Node> {
+        let mut node = self.new_node();
+        {
+            let mut state = node.write().unwrap();
+            state.node_type = NodeType::Application;
+            state.name = raw.get_str("name", "new application");
+        }
+        node
     }
 }
 
-pub type Node = RwLock<NodeProto>;

@@ -1,0 +1,12 @@
+{
+  "name": "sample-application",
+  "children": {
+    "service1": {
+      "children": {
+        "service3": {}
+      }
+    },
+    "service2": {
+    }
+  }
+}

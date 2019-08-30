@@ -1,5 +1,4 @@
 extern crate serde_json;
-
 use std::fs;
 use std::env;
 
@@ -12,7 +11,6 @@ use watcher::*;
 
 
 fn main() {
-    println!("Hello, world!");
     let mut conf_path = None;
 
     for arg in env::args().skip(1) {
@@ -32,7 +30,7 @@ fn main() {
     let config = serde_json::from_reader(conf_file).expect("Failed to parse config file");
 
     let mut watcher = Watcher::new();
-    watcher.add_application(config);
 
+    watcher.add_application(&config);
     watcher.start();
 }
