@@ -19,6 +19,12 @@ pub fn now() -> u64 {
 }
 
 #[allow(dead_code)]
+#[inline]
+pub fn now_ms() -> u128 {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()
+}
+
+#[allow(dead_code)]
 impl JsonParser for Value {
     fn get_bool<I: Index>(&self, index: I, default: bool) -> bool {
         match self[index].as_bool() {

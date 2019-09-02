@@ -38,13 +38,19 @@ impl ApplicationProto {
         self.run_tick(tick);
     }
 
+    pub fn read_name(&self) -> String {
+        let root = self.root.clone();
+        root.upgrade().unwrap().read().unwrap().name.clone()
+    }
+
     fn run_tick(&mut self, tick: u64) {
+        let app_name = self.read_name();
         self.last_tick = tick;
         let nodes = self.nodes.read().unwrap();
         for item in nodes.iter().rev() {
             if let Some(node) = item.upgrade() {
                 let mut node = node.write().unwrap();
-                node.tick(tick);
+                node.tick(tick, &app_name);
             }
         }
 
@@ -139,7 +145,7 @@ impl ApplicationProto {
             parent.add_child(Arc::downgrade(&node));
             let mut child = node.write().unwrap();
             child.add_parent(Arc::downgrade(parent_node));
-            println!("linking parent {} with child {}", parent.name, child.name);
+            info!("linking parent {} with child {}", parent.name, child.name);
         }
     }
 

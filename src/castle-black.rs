@@ -1,19 +1,24 @@
+#![feature(async_await)]
 extern crate serde_json;
 #[macro_use] extern crate log;
 extern crate env_logger;
 
 use std::env;
 use std::fs;
+use std::error::Error;
 
 mod application;
 
 mod watcher;
 mod node;
+mod metric;
+mod event;
 mod utils;
+mod alert;
 use watcher::*;
 
-
-fn main() {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
     let mut conf_path = None;
 
@@ -36,5 +41,7 @@ fn main() {
     let mut watcher = Watcher::new();
 
     watcher.add_application(&config);
+    watcher.tick();
     watcher.start();
+    Ok(())
 }

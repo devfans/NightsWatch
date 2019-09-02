@@ -1,4 +1,5 @@
 use std::sync::Weak;
+use crate::node::*;
 
 pub enum EventType {
     HealthDowngrade,
@@ -15,3 +16,4 @@ pub struct Event {
     timestamp: u64,
     path: String,
 }
+

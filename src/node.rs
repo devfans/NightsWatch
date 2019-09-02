@@ -148,17 +148,24 @@ impl NodeProto {
                 amount += child.health_status as u32;
             }
         }
-        self.health_status = (amount / count) as u8;
+        self.health_status = 255;
+        if count > 0 { self.health_status = (amount / count) as u8; }
         self.health_last_check = utils::now();
     }
 
-    pub fn tick(&mut self, tick: u64) {
+    pub fn tick(&mut self, tick: u64, app_name: &String) {
         if self.health_check_tick > tick {
             panic!("Unexpected check tick of node");
         } else if self.health_check_tick < tick {
             self.health_check_tick = tick;
             self.calculate_health();
+            let app_meta = self.get_app_meta(app_name).unwrap();
+            info!("App:{} node {} status evaluated as {}", app_name, app_meta.path.read(), self.health_status);
         }
+    }
+
+    pub fn get_app_meta(&mut self, app_name: &String) -> Option<&AppMeta> {
+        self.app_meta_map.get(app_name)
     }
 }
 
@@ -167,6 +174,7 @@ pub trait StoreOps {
     fn add_node(&mut self, raw: &Value, name: String) -> Arc<Node>;
     fn add_app_node(&mut self, raw: &Value) -> Arc<Node>;
     fn update_index(&mut self, name: &String, index: u64);
+    fn get_weak_node(&mut self, path: &String) -> Option<Weak<Node>>;
 }
 
 impl StoreOps for Arc<Store> {
@@ -225,11 +233,11 @@ impl StoreOps for Arc<Store> {
     }
 
     fn add_app_node(&mut self, raw: &serde_json::Value) -> Arc<Node> {
-        let mut node = self.new_node();
+        let name = raw.get_str("name", "new_application");
+        let node = self.add_node(raw, name);
         {
             let mut state = node.write().unwrap();
             state.node_type = NodeType::Application;
-            state.name = raw.get_str("name", "new_application");
         }
         node
     }
@@ -239,5 +247,14 @@ impl StoreOps for Arc<Store> {
         state.index.insert(name.clone(), index);
     }
 
+    fn get_weak_node(&mut self, path: &String) -> Option<Weak<Node>> {
+        let state = self.read().unwrap();
+        if let Some(id) = state.index.get(path) {
+            if let Some(node) = state.store.get(&id) {
+                return Some(Arc::downgrade(&node.clone()));
+            }
+        }
+        None
+    }
 }
 
