@@ -100,7 +100,7 @@ impl Watcher {
         let mut last_tick: u64;
         {
             let state = self.state.read().unwrap();
-            interval = state.interval;
+            interval = state.interval * 1000;
         }
         loop {
             {
