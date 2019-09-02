@@ -107,7 +107,7 @@ impl Watcher {
                 let state = self.state.read().unwrap();
                 last_tick = state.last_tick_start as u64;
             }
-            let sleep_ms = last_tick as i64 + (interval as i64 - utils::now() as i64) * 1000;
+            let sleep_ms = (last_tick + interval) as i64 - utils::now() as i64 * 1000;
             if sleep_ms > 0 {
                 Delay::new(Instant::now() + Duration::from_millis(sleep_ms as u64)).await;
             }
