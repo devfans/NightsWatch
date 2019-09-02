@@ -9,6 +9,9 @@ use crate::alert::*;
 use crate::event::*;
 use std::collections::HashMap;
 use tokio::sync::mpsc;
+use std::error::Error;
+use std::time::{Instant, Duration};
+use tokio::timer::Delay;
 
 pub struct WatcherState {
     tick: u64,
@@ -17,8 +20,11 @@ pub struct WatcherState {
 
     last_tick_start: u128,
     last_tick_end: u128,
+    
+    interval: u64,
 }
 
+#[derive(Clone)]
 pub struct WatcherDispatcher {
     metric_tx: mpsc::UnboundedSender<Metric>,
     event_tx: mpsc::UnboundedSender<Event>,
@@ -58,8 +64,7 @@ pub struct Watcher {
     app_map: Arc<RwLock<HashMap<String, Arc<Application>>>>,
     store: Arc<Store>,
     state: Arc<RwLock<WatcherState>>,
-
-    metric_channel: MetricChannel,
+    dispatcher: WatcherDispatcher,
 }
 
 impl Watcher {
@@ -70,13 +75,14 @@ impl Watcher {
             tick_init: true,
             last_tick_start: 0,
             last_tick_end: 0,
+            interval: 10,
 
         };
         Watcher {
             app_map: Arc::new(RwLock::new(HashMap::new())),
             state: Arc::new(RwLock::new(state)),
             store: StoreProto::new(),
-            metric_channel: MetricChannel::new(),
+            dispatcher: WatcherDispatcher::new(),
         }
     }
 
@@ -89,10 +95,29 @@ impl Watcher {
         apps.insert(app_name, app.clone());
     }
 
-    pub fn start(&mut self) {
+    pub async fn start(&mut self) -> Result<(), Box<dyn Error>> {
+        let interval: u64;
+        let mut last_tick: u64;
+        {
+            let state = self.state.read().unwrap();
+            interval = state.interval;
+        }
+        loop {
+            {
+                let state = self.state.read().unwrap();
+                last_tick = state.last_tick_start as u64;
+            }
+            let sleep_ms = last_tick as i64 + (interval as i64 - utils::now() as i64) * 1000;
+            if sleep_ms > 0 {
+                Delay::new(Instant::now() + Duration::from_millis(sleep_ms as u64)).await;
+            }
+            self.tick();
+        }
+        Ok(())
     }
 
     pub fn tick(&mut self) {
+        info!("Watcher starts to stare at white walkers");
         let tick: u64;
         {
             let mut state = self.state.write().unwrap();

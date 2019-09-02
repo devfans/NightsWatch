@@ -41,7 +41,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut watcher = Watcher::new();
 
     watcher.add_application(&config);
-    watcher.tick();
-    watcher.start();
+    watcher.start().await;
     Ok(())
 }
