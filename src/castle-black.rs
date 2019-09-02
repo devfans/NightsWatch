@@ -1,6 +1,9 @@
 extern crate serde_json;
-use std::fs;
+#[macro_use] extern crate log;
+extern crate env_logger;
+
 use std::env;
+use std::fs;
 
 mod application;
 
@@ -11,6 +14,7 @@ use watcher::*;
 
 
 fn main() {
+    env_logger::init();
     let mut conf_path = None;
 
     for arg in env::args().skip(1) {

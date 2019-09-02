@@ -31,9 +31,9 @@ impl Watcher {
     }
 
     pub fn add_application(&mut self, raw: &Value) {
-        let app = ApplicationProto::new();
+        let app = ApplicationProto::new(self.store.clone());
         let mut state = app.write().unwrap();
-        state.parse(&raw, self.store.clone());
+        state.parse(&raw);
         let mut apps = self.applications.write().unwrap();
         apps.push(app.clone());
     }

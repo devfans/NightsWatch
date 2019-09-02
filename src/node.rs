@@ -5,6 +5,8 @@ use crate::utils::*;
 use crate::utils;
 use std::collections::HashMap;
 
+// use log::{warn, info};
+
 pub enum NodeType {
     Application,
     Node,
@@ -19,10 +21,12 @@ pub enum HealthCheckType {
 pub type Node = RwLock<NodeProto>;
 pub type NodeStore = HashMap<u64, Arc<Node>>;
 pub type NodeQ = Vec<Weak<Node>>;
+pub type NodeIndexStore = HashMap<String, u64>;
 
 pub struct StoreProto {
     id: u64,
     store: NodeStore,
+    index: NodeIndexStore,
 }
 
 impl StoreProto {
@@ -30,11 +34,67 @@ impl StoreProto {
         Arc::new(RwLock::new(StoreProto {
             id: 0,
             store: HashMap::new(),
+            index: HashMap::new(),
         }))
     }
 }
 
 pub type Store = RwLock<StoreProto>;
+
+pub struct InitNodeQ {
+    pub app_meta: AppMeta,
+    pub nodes: NodeQ,
+}
+
+#[derive(Clone)]
+pub struct AppMeta {
+    pub path: NodePath,
+}
+
+impl AppMeta {
+    pub fn new() -> AppMeta {
+        AppMeta {
+            path: NodePath::new_path(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct NodePath {
+    path: String,
+    depth: usize,
+}
+
+impl NodePath {
+    pub fn new_path() -> NodePath {
+        NodePath {
+            path: String::new(),
+            depth: 0,
+        }
+    }
+
+    pub fn append(&mut self, name: &String) {
+        self.path.push_str(&(".".to_owned() + name));
+        self.depth += 1;
+    }
+
+    pub fn new(root: String) -> NodePath {
+        NodePath {
+            path: root,
+            depth: 1,
+        }
+    }
+
+    pub fn read(&self) -> String {
+        self.path.clone()
+    }
+
+    pub fn read_depth(&self) -> usize {
+        self.depth
+    }
+}
+
+pub type AppMetaMap = HashMap<String, AppMeta>;
 
 pub struct NodeProto {
     pub id: u64,
@@ -57,13 +117,15 @@ pub struct NodeProto {
     pub health_check_eval: Option<String>,
     pub health_check_type: HealthCheckType,
     pub health_event_enabled: bool,
-    pub health_check_init: bool,
-    pub health_check_source: Weak<Node>,
+    health_check_init: bool,
+    health_check_source: Weak<Node>,
 
     pub health_check_tick: u64,
     pub health_last_check: u64,
     pub health_last_report: u64,
     pub health_last_change: u64,
+
+    pub app_meta_map: AppMetaMap,
 }
 
 impl NodeProto {
@@ -104,6 +166,7 @@ pub trait StoreOps {
     fn new_node(&mut self) -> Arc<Node>;
     fn add_node(&mut self, raw: &Value, name: String) -> Arc<Node>;
     fn add_app_node(&mut self, raw: &Value) -> Arc<Node>;
+    fn update_index(&mut self, name: &String, index: u64);
 }
 
 impl StoreOps for Arc<Store> {
@@ -134,6 +197,7 @@ impl StoreOps for Arc<Store> {
             health_last_check: 0,
             health_last_report: 0,
             health_last_change: 0,
+            app_meta_map: HashMap::new(),
         };
         let mut store = self.write().unwrap();
         let id = store.id;
@@ -144,7 +208,7 @@ impl StoreOps for Arc<Store> {
         new_node
     }
     fn add_node(&mut self, raw: &Value, name: String) -> Arc<Node> {
-        let mut node = self.new_node();
+        let node = self.new_node();
         {
             let mut state = node.write().unwrap();
             state.name = name;
@@ -165,9 +229,15 @@ impl StoreOps for Arc<Store> {
         {
             let mut state = node.write().unwrap();
             state.node_type = NodeType::Application;
-            state.name = raw.get_str("name", "new application");
+            state.name = raw.get_str("name", "new_application");
         }
         node
     }
+
+    fn update_index(&mut self, name: &String, index: u64) {
+        let mut state = self.write().unwrap();
+        state.index.insert(name.clone(), index);
+    }
+
 }
 

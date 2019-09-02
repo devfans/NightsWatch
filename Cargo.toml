@@ -17,3 +17,5 @@ path = "src/agent.rs"
 
 [dependencies]
 serde_json = "1.0"
+log = "*"
+env_logger = "*"
