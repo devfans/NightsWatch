@@ -1,9 +1,12 @@
-use std::sync::{Arc, Weak, RwLock};
+use std::sync::{Arc, Weak, RwLock, Mutex};
 
 use serde_json::Value;
 use crate::utils::*;
-use crate::utils;
-use std::collections::HashMap;
+use crate::utils::{self, AsyncRes};
+use std::collections::{HashMap, HashSet};
+use std::iter::FromIterator;
+use tokio::timer::delay;
+use std::time::{Instant, Duration};
 
 // use log::{warn, info};
 
@@ -22,6 +25,88 @@ pub type Node = RwLock<NodeProto>;
 pub type NodeStore = HashMap<u64, Arc<Node>>;
 pub type NodeQ = Vec<Weak<Node>>;
 pub type NodeIndexStore = HashMap<String, u64>;
+pub type NodePathLocker = Mutex<NodePathLockerProto>;
+
+pub struct NodePathLockerProto {
+    locks: HashSet<String>,
+}
+
+impl NodePathLockerProto {
+    pub fn new() -> Arc<NodePathLocker> {
+        Arc::new(Mutex::new(NodePathLockerProto {
+            locks: HashSet::new(),
+        }))
+    }
+
+    #[allow(dead_code)]
+    pub async fn lock_path(&mut self, path: &String, locked: &mut bool) -> AsyncRes {
+        *locked = self.locks.insert(path.clone()); 
+        Ok(())
+    }
+
+    pub async fn lock_pathes(&mut self, pathes: &HashSet<String>, locked: &mut bool) -> AsyncRes {
+        let mut locked_pathes: HashSet<&String>= HashSet::new();
+        let mut success = true;
+        for path in pathes.iter() {
+            if self.locks.insert(path.clone()) {
+                locked_pathes.insert(path);
+            } else {
+                success = false;
+                break;
+            }
+        }
+        *locked = success;
+        if !success {
+            for path in locked_pathes.iter() {
+                let _ = self.locks.remove(path.clone());
+            }
+        }
+        Ok(())
+    }
+    
+    pub async fn unlock_pathes(&mut self, pathes: &HashSet<String>) -> AsyncRes {
+        for path in pathes.iter() {
+            let _ = self.locks.remove(path);
+        }
+        Ok(())
+    }
+}
+
+pub struct NodeHodor {
+    pathes: HashSet<String>,
+    locker: Arc<NodePathLocker>,
+}
+
+impl NodeHodor {
+    pub fn new(pathes: &Vec<String>, locker: Arc<NodePathLocker>) -> NodeHodor {
+        let pathes:  HashSet<String> = HashSet::from_iter(pathes.iter().cloned());
+        NodeHodor {
+            pathes,
+            locker,
+        }
+    }
+
+    pub async fn try_lock(&self, locked: &mut bool) -> AsyncRes {
+        let mut locker = self.locker.lock().unwrap();
+        locker.lock_pathes(&self.pathes, locked).await;
+        Ok(())
+    } 
+
+    pub async fn try_get_locked(&self, locked: &mut bool, sleep_ms: u64) -> AsyncRes {
+        self.try_lock(locked).await;
+        if !*locked {
+            delay(Instant::now() + Duration::from_millis(sleep_ms as u64)).await;
+        }
+        self.try_lock(locked).await;
+        Ok(())
+    }
+
+    pub async fn unlock(&self) -> AsyncRes {
+        let mut locker = self.locker.lock().unwrap();
+        locker.unlock_pathes(&self.pathes).await;
+        Ok(())
+    }
+}
 
 pub struct StoreProto {
     id: u64,

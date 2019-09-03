@@ -7,11 +7,12 @@ use crate::utils;
 use crate::metric::*;
 use crate::alert::*;
 use crate::event::*;
+use crate::landing::Landing;
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 use std::error::Error;
 use std::time::{Instant, Duration};
-use tokio::timer::Delay;
+use tokio::timer::delay;
 
 pub struct WatcherState {
     tick: u64,
@@ -65,6 +66,8 @@ pub struct Watcher {
     store: Arc<Store>,
     state: Arc<RwLock<WatcherState>>,
     dispatcher: WatcherDispatcher,
+    pub locker: Arc<NodePathLocker>,
+    pub landing: Arc<RwLock<Landing>>,
 }
 
 impl Watcher {
@@ -83,7 +86,13 @@ impl Watcher {
             state: Arc::new(RwLock::new(state)),
             store: StoreProto::new(),
             dispatcher: WatcherDispatcher::new(),
+            locker: NodePathLockerProto::new(),
+            landing: Arc::new(RwLock::new(Landing::new())),
         }
+    }
+    
+    pub fn new_locker(&self, pathes: &Vec<String>) -> NodeHodor {
+        NodeHodor::new(pathes, self.locker.clone())
     }
 
     pub fn add_application(&mut self, raw: &Value) {
@@ -109,11 +118,10 @@ impl Watcher {
             }
             let sleep_ms = (last_tick + interval) as i64 - utils::now() as i64 * 1000;
             if sleep_ms > 0 {
-                Delay::new(Instant::now() + Duration::from_millis(sleep_ms as u64)).await;
+                delay(Instant::now() + Duration::from_millis(sleep_ms as u64)).await;
             }
             self.tick();
         }
-        Ok(())
     }
 
     pub fn tick(&mut self) {

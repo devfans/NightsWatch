@@ -1,13 +1,21 @@
+#![warn(rust_2018_idioms)]
+
+extern crate serde;
 extern crate serde_json;
 #[macro_use] extern crate log;
 extern crate env_logger;
 extern crate bytes;
+extern crate tokio_timer;
+extern crate futures_core;
+extern crate futures_sink;
+extern crate futures_util;
 
 use std::env;
 use std::fs;
 
 mod application;
 
+mod landing;
 mod watcher;
 mod node;
 mod metric;
@@ -16,11 +24,14 @@ mod utils;
 mod alert;
 mod dracarys;
 mod maester;
+mod nightfort;
 
 use utils::*;
 
 use watcher::*;
+use nightfort::Nightfort;
 use log::{info, warn};
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> AsyncRes {
@@ -44,8 +55,17 @@ async fn main() -> AsyncRes {
     let config = serde_json::from_reader(conf_file).expect("Failed to parse config file");
 
     let mut watcher = Watcher::new();
-
     watcher.add_application(&config);
+    {
+        let mut landing = watcher.landing.write().unwrap();
+        landing.parse(&config);
+    }
+
+
+    let global_watcher = Arc::new(watcher.clone());
+    let mut nightfort = Nightfort::new(&global_watcher);
+    tokio::spawn( async move { let _ = nightfort.setup().await; } );
+
     watcher.start().await?;
     warn!("Watcher is being destroyed!!!");
     Ok(())
