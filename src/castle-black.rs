@@ -1,11 +1,10 @@
-#![feature(async_await)]
 extern crate serde_json;
 #[macro_use] extern crate log;
 extern crate env_logger;
+extern crate bytes;
 
 use std::env;
 use std::fs;
-use std::error::Error;
 
 mod application;
 
@@ -15,10 +14,16 @@ mod metric;
 mod event;
 mod utils;
 mod alert;
+mod dracarys;
+mod maester;
+
+use utils::*;
+
 use watcher::*;
+use log::{info, warn};
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> AsyncRes {
     env_logger::init();
     let mut conf_path = None;
 
@@ -33,7 +38,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     } else {
         "./config.json".to_string()
     };
-    println!("Loading configuration from {}", conf);
+    info!("Loading configuration from {}", conf);
 
     let conf_file = fs::File::open(conf).expect("Failed to read config file");
     let config = serde_json::from_reader(conf_file).expect("Failed to parse config file");
@@ -41,6 +46,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut watcher = Watcher::new();
 
     watcher.add_application(&config);
-    watcher.start().await;
+    watcher.start().await?;
+    warn!("Watcher is being destroyed!!!");
     Ok(())
 }

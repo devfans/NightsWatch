@@ -2,8 +2,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde_json::Value;
 use serde_json::map::Map;
 use serde_json::value::Index;
+use std::error::Error;
+use std::fmt;
 
 pub type JsonMap = Map<String, Value>;
+#[allow(dead_code)]
+pub type AsyncRes = Result<(), Box<dyn Error>>;
 
 pub trait JsonParser {
     fn get_bool<I: Index>(&self, index: I, default: bool) -> bool;
@@ -58,6 +62,32 @@ impl JsonParser for Value {
             None => default,
         }
     }
+}
 
+#[allow(dead_code)]
+#[inline]
+pub fn get_u16_le(v: &[u8]) -> u16 {
+    ((v[1] as u16) << 8) | v[0] as u16
+}
 
+#[allow(dead_code)]
+#[inline]
+pub fn get_u32_le(v: &[u8]) -> u32 {
+    ((v[3] as u32) << 24) |
+    ((v[2] as u32) << 16) |
+    ((v[1] as u32) << 8) |
+    v[0] as u32
+}
+
+#[derive(Debug)]
+pub struct CodecError;
+impl fmt::Display for CodecError {
+	fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+		fmt.write_str("Bad data")
+	}
+}
+impl Error for CodecError {
+	fn description(&self) -> &str {
+		"Bad data"
+	}
 }

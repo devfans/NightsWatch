@@ -1,8 +1,8 @@
-use std::sync::{Weak, Arc, RwLock, RwLockWriteGuard};
+use std::sync::{Weak, Arc, RwLock};
 use serde_json::Value;
 use crate::node::*;
 use crate::utils::*;
-use log::{warn, info};
+use log::{info};
 use std::collections::VecDeque;
 
 pub type Application = RwLock<ApplicationProto>;
