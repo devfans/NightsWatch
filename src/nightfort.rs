@@ -11,7 +11,7 @@ use crate::node::*;
 use std::collections::HashMap;
 use crate::dracarys::{Dracarys, DracarysFramer};
 use futures::{StreamExt};
-use std::error::Error;
+use serde_json::{self, json};
 
 struct ColdHands {
     hands: HashMap<u16, Weak<Node>>,
@@ -27,13 +27,23 @@ impl ColdHands {
     }
     pub async fn process(&mut self, msg: Dracarys) -> AsyncRes {
         match msg {
-            Dracarys::Target { id, ref pathes, ref name, ref extra } => {
-                // > Find leaf node via walk through pathes
-                // > If can not find 
+            Dracarys::Target { id, ref paths, ref name, ref extra } => {
+                // Try to lock paths first before create a leaf node
                 let watcher = self.watcher.upgrade().unwrap();
-                let locker = watcher.new_locker(pathes);
+                let locker = watcher.new_locker(paths);
                 let mut locked = false;
-                locker.try_get_locked(&mut locked, 1000).await;
+                locker.try_get_locked(&mut locked, 1000).await?;
+                if locked {
+                    // Create leaf node and link to parents
+                    let raw = match serde_json::from_str(extra) {
+                        Ok(raw) => raw,
+                        Err(_) => json!({}),
+                    };
+                    watcher.allocate_ranger(name, paths, &raw);
+                    locker.unlock().await?;
+                } else {
+                    warn!("Failed to lock requested node paths: {:?}", msg);
+                }
             },
             Dracarys::Report { id, health_status } => {
                 if let Some(node) = self.hands.get(&id) {
@@ -98,7 +108,7 @@ impl Nightfort {
         // > Find parents
         // > Create leaf node
         // > Poll
-        let handler = ColdHands::new(watcher);
+        let mut handler = ColdHands::new(watcher);
         let mut stream = Framed::new(stream, DracarysFramer::new());
 
         loop {

@@ -91,8 +91,8 @@ impl Watcher {
         }
     }
     
-    pub fn new_locker(&self, pathes: &Vec<String>) -> NodeHodor {
-        NodeHodor::new(pathes, self.locker.clone())
+    pub fn new_locker(&self, paths: &Vec<String>) -> NodeHodor {
+        NodeHodor::new(paths, self.locker.clone())
     }
 
     pub fn add_application(&mut self, raw: &Value) {
@@ -102,6 +102,39 @@ impl Watcher {
         let mut apps = self.app_map.write().unwrap();
         let app_name = state.read_name();
         apps.insert(app_name, app.clone());
+    }
+
+    pub fn sig_app_init(&self, app: &String) {
+        let apps = self.app_map.read().unwrap();
+        if let Some(app) = apps.get(app) {
+            let mut state = app.write().unwrap();
+            state.sig_init();
+        }
+    }
+
+    pub fn allocate_ranger(&self, name: &String, paths: &Vec<String>, raw: &Value) -> Arc<Node> {
+        // Create new leaf node
+        // Link to parents
+        // Activate application init_nodes
+        let node = self.store.add_leaf_node(name, raw);
+        let mut leaf = node.write().unwrap();
+        for path in paths.iter() {
+            if let Some(app) = AppMeta::parse_app_name(path) {
+                self.sig_app_init(&app);
+                if let Some(parent) = self.store.get_weak_node(path) {
+                    let parent_node = parent.upgrade().unwrap();
+                    let mut state = parent_node.write().unwrap();
+                    state.add_child(Arc::downgrade(&node));
+                    leaf.add_parent(parent);
+                } else {
+                    warn!("Failed to find parent: {}", path);
+                }
+
+            } else {
+                warn!("Failed to parse app name from path: {}", path);
+            }
+        }
+        node.clone()
     }
 
     pub async fn start(&mut self) -> Result<(), Box<dyn Error>> {

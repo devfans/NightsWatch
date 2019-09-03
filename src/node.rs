@@ -39,17 +39,16 @@ impl NodePathLockerProto {
     }
 
     #[allow(dead_code)]
-    pub async fn lock_path(&mut self, path: &String, locked: &mut bool) -> AsyncRes {
+    pub fn lock_path(&mut self, path: &String, locked: &mut bool) {
         *locked = self.locks.insert(path.clone()); 
-        Ok(())
     }
 
-    pub async fn lock_pathes(&mut self, pathes: &HashSet<String>, locked: &mut bool) -> AsyncRes {
-        let mut locked_pathes: HashSet<&String>= HashSet::new();
+    pub fn lock_paths(&mut self, paths: &HashSet<String>, locked: &mut bool) {
+        let mut locked_paths: HashSet<&String>= HashSet::new();
         let mut success = true;
-        for path in pathes.iter() {
+        for path in paths.iter() {
             if self.locks.insert(path.clone()) {
-                locked_pathes.insert(path);
+                locked_paths.insert(path);
             } else {
                 success = false;
                 break;
@@ -57,53 +56,51 @@ impl NodePathLockerProto {
         }
         *locked = success;
         if !success {
-            for path in locked_pathes.iter() {
+            for path in locked_paths.iter() {
                 let _ = self.locks.remove(path.clone());
             }
         }
-        Ok(())
     }
     
-    pub async fn unlock_pathes(&mut self, pathes: &HashSet<String>) -> AsyncRes {
-        for path in pathes.iter() {
+    pub fn unlock_paths(&mut self, paths: &HashSet<String>) {
+        for path in paths.iter() {
             let _ = self.locks.remove(path);
         }
-        Ok(())
     }
 }
 
 pub struct NodeHodor {
-    pathes: HashSet<String>,
+    paths: HashSet<String>,
     locker: Arc<NodePathLocker>,
 }
 
 impl NodeHodor {
-    pub fn new(pathes: &Vec<String>, locker: Arc<NodePathLocker>) -> NodeHodor {
-        let pathes:  HashSet<String> = HashSet::from_iter(pathes.iter().cloned());
+    pub fn new(paths: &Vec<String>, locker: Arc<NodePathLocker>) -> NodeHodor {
+        let paths:  HashSet<String> = HashSet::from_iter(paths.iter().cloned());
         NodeHodor {
-            pathes,
+            paths,
             locker,
         }
     }
 
     pub async fn try_lock(&self, locked: &mut bool) -> AsyncRes {
         let mut locker = self.locker.lock().unwrap();
-        locker.lock_pathes(&self.pathes, locked).await;
+        locker.lock_paths(&self.paths, locked);
         Ok(())
     } 
 
     pub async fn try_get_locked(&self, locked: &mut bool, sleep_ms: u64) -> AsyncRes {
-        self.try_lock(locked).await;
+        self.try_lock(locked).await?;
         if !*locked {
             delay(Instant::now() + Duration::from_millis(sleep_ms as u64)).await;
         }
-        self.try_lock(locked).await;
+        self.try_lock(locked).await?;
         Ok(())
     }
 
     pub async fn unlock(&self) -> AsyncRes {
         let mut locker = self.locker.lock().unwrap();
-        locker.unlock_pathes(&self.pathes).await;
+        locker.unlock_paths(&self.paths);
         Ok(())
     }
 }
@@ -141,6 +138,15 @@ impl AppMeta {
         AppMeta {
             path: NodePath::new_path(),
         }
+    }
+
+    pub fn parse_app_name(path: &String) -> Option<String> {
+        if !path.starts_with('.') { return None }
+        let tokens: Vec<&str> = path.split('.').collect();
+        if tokens.len() > 1 && tokens[1].len() > 0 {
+            return Some(tokens[1].to_string());
+        }
+        None
     }
 }
 
@@ -255,15 +261,16 @@ impl NodeProto {
 }
 
 pub trait StoreOps {
-    fn new_node(&mut self) -> Arc<Node>;
-    fn add_node(&mut self, raw: &Value, name: String) -> Arc<Node>;
-    fn add_app_node(&mut self, raw: &Value) -> Arc<Node>;
-    fn update_index(&mut self, name: &String, index: u64);
-    fn get_weak_node(&mut self, path: &String) -> Option<Weak<Node>>;
+    fn new_node(&self) -> Arc<Node>;
+    fn add_node(&self, raw: &Value, name: String) -> Arc<Node>;
+    fn add_app_node(&self, raw: &Value) -> Arc<Node>;
+    fn add_leaf_node(&self, name: &String, raw: &Value) -> Arc<Node>;
+    fn update_index(&self, name: &String, index: u64);
+    fn get_weak_node(&self, path: &String) -> Option<Weak<Node>>;
 }
 
 impl StoreOps for Arc<Store> {
-    fn new_node(&mut self) -> Arc<Node> {
+    fn new_node(&self) -> Arc<Node> {
         let mut node = NodeProto {
             id: 0,
             node_type: NodeType::Node,
@@ -300,7 +307,7 @@ impl StoreOps for Arc<Store> {
         store.store.insert(id, new_node.clone());
         new_node
     }
-    fn add_node(&mut self, raw: &Value, name: String) -> Arc<Node> {
+    fn add_node(&self, raw: &Value, name: String) -> Arc<Node> {
         let node = self.new_node();
         {
             let mut state = node.write().unwrap();
@@ -317,7 +324,15 @@ impl StoreOps for Arc<Store> {
         node
     }
 
-    fn add_app_node(&mut self, raw: &serde_json::Value) -> Arc<Node> {
+    fn add_leaf_node(&self, name: &String, raw: &Value) -> Arc<Node> {
+        let node = self.add_node(raw, name.clone());
+        {
+            let mut state = node.write().unwrap();
+            state.node_type = NodeType::Leaf;
+        }
+        node
+    }
+    fn add_app_node(&self, raw: &serde_json::Value) -> Arc<Node> {
         let name = raw.get_str("name", "new_application");
         let node = self.add_node(raw, name);
         {
@@ -327,12 +342,12 @@ impl StoreOps for Arc<Store> {
         node
     }
 
-    fn update_index(&mut self, name: &String, index: u64) {
+    fn update_index(&self, name: &String, index: u64) {
         let mut state = self.write().unwrap();
         state.index.insert(name.clone(), index);
     }
 
-    fn get_weak_node(&mut self, path: &String) -> Option<Weak<Node>> {
+    fn get_weak_node(&self, path: &String) -> Option<Weak<Node>> {
         let state = self.read().unwrap();
         if let Some(id) = state.index.get(path) {
             if let Some(node) = state.store.get(&id) {

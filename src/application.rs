@@ -29,6 +29,10 @@ impl ApplicationProto {
         }))
     }
 
+    pub fn sig_init(&mut self) {
+        self.nodes_init = true;
+    }
+
     pub fn tick(&mut self, tick: u64) {
         if self.nodes_init {
             self.init_nodes();

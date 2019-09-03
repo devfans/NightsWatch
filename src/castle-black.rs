@@ -1,14 +1,6 @@
-#![warn(rust_2018_idioms)]
-
-extern crate serde;
-extern crate serde_json;
+use serde_json;
 #[macro_use] extern crate log;
-extern crate env_logger;
-extern crate bytes;
-extern crate tokio_timer;
-extern crate futures_core;
-extern crate futures_sink;
-extern crate futures_util;
+use env_logger;
 
 use std::env;
 use std::fs;

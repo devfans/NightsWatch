@@ -16,7 +16,7 @@ use crate::utils;
 pub enum Dracarys {
     Target {
         id: u16,
-        pathes: Vec<String>,
+        paths: Vec<String>,
         name: String,
         extra: String,
     },
@@ -45,10 +45,10 @@ impl codec::Encoder for DracarysFramer {
 
     fn encode(&mut self, msg: Dracarys, res: &mut bytes::BytesMut) -> Result<(), io::Error> {
         match msg {
-            Dracarys::Target { id, ref pathes, ref name, ref extra} => {
-                let path_count = pathes.len();
+            Dracarys::Target { id, ref paths, ref name, ref extra} => {
+                let path_count = paths.len();
                 let mut path_total_len: usize = 0;
-                for path in pathes.iter() {
+                for path in paths.iter() {
                     path_total_len += path.len();
                 }
                 let data_len = path_total_len + name.len() + extra.len();
@@ -58,7 +58,7 @@ impl codec::Encoder for DracarysFramer {
                 res.put_u32_le(total_len as u32);
                 res.put_u16_le(id);
                 res.put_u8(path_count as u8);
-                for path in pathes.iter() {
+                for path in paths.iter() {
                     res.put_u16_le(path.len() as u16);
                     res.put_slice(path.as_bytes());
                 }
@@ -124,15 +124,15 @@ impl codec::Decoder for DracarysFramer {
             0xe001 => {
                 let path_count = bytes[pos] as usize;
                 pos += 1;
-                let mut pathes = Vec::new();
+                let mut paths = Vec::new();
                 for _ in 0..path_count {
-                    pathes.push(read_string!());
+                    paths.push(read_string!());
                 }
                 let name = read_string!();
                 let extra = read_string!();
                 let msg = Dracarys::Target {
                     id,
-                    pathes,
+                    paths,
                     name,
                     extra,
                 };
