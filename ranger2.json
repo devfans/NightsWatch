@@ -1,0 +1,19 @@
+{
+  "nightfort": "0.0.0.0:6000",
+  "targets": {
+    "0": {
+      "check_script": "",
+      "name": "ranger2",
+      "paths": [".sample-application.service1"],
+      "interval": 10,
+      "extra": {}
+    },
+    "1": {
+      "check_script": "",
+      "name": "ranger3",
+      "paths": [".sample-application.service2"],
+      "interval": 10,
+      "extra": {}
+    }
+  }
+}

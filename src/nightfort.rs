@@ -13,6 +13,9 @@ use crate::dracarys::{Dracarys, DracarysFramer};
 use futures::{StreamExt};
 use serde_json::{self, json};
 
+use std::time::{Duration, Instant};
+use tokio::timer::delay;
+
 struct ColdHands {
     hands: HashMap<u16, Weak<Node>>,
     watcher: Weak<Watcher>,
@@ -32,17 +35,31 @@ impl ColdHands {
                 let watcher = self.watcher.upgrade().unwrap();
                 let locker = watcher.new_locker(paths);
                 let mut locked = false;
-                locker.try_get_locked(&mut locked, 1000).await?;
+                let mut failed_path: String = String::new();
+                locker.try_lock(&mut locked, &mut failed_path).await?;
                 if locked {
                     // Create leaf node and link to parents
                     let raw = match serde_json::from_str(extra) {
                         Ok(raw) => raw,
                         Err(_) => json!({}),
                     };
-                    watcher.allocate_ranger(name, paths, &raw);
+                    if let Some(ranger) = watcher.allocate_ranger(name, paths, &raw) {
+                        self.hands.insert(id, ranger);
+                        info!("Successfully allocated/found the ranger for {:?}", msg);
+                    } else {
+                        warn!("Failed to allocate the ranger");
+                    }
                     locker.unlock().await?;
                 } else {
-                    warn!("Failed to lock requested node paths: {:?}", msg);
+                    delay(Instant::now() + Duration::from_millis(200)).await;
+                    if failed_path.is_empty() {
+                        warn!("Failed to lock requested node paths: {:?}", msg);
+                    } else if let Some(ranger) = watcher.locate_node(&failed_path) {
+                        self.hands.insert(id, ranger);
+                        info!("Successfully allocated/found the ranger for {:?}", msg);
+                    } else {
+                        warn!("Failed to find the ranger: {:?}", msg);
+                    }
                 }
             },
             Dracarys::Report { id, health_status } => {
@@ -51,6 +68,7 @@ impl ColdHands {
                         let mut state = state.write().unwrap();
                         state.health_status = health_status;
                         state.health_last_check = utils::now();
+                        info!("Successfully updated health status for range with id {}", id);
                     } else {
                         warn!("Failed to get the target node for report {:?}", msg);
                     }
@@ -98,28 +116,28 @@ impl Nightfort {
             let watcher = self.watcher.clone();
             tokio::spawn(async move {
                 if let Err(e) = Nightfort::process(watcher, stream, addr).await {
-                    error!("Error on this raven: {}, error: {:?}", addr, e);
+                    error!("Error on this ranger: {}, error: {:?}", addr, e);
                 }
             });
         }
     }
 
-    pub async fn process(watcher: Weak<Watcher>, stream: TcpStream, _addr: SocketAddr) -> AsyncRes {
-        // > Find parents
-        // > Create leaf node
-        // > Poll
+    pub async fn process(watcher: Weak<Watcher>, stream: TcpStream, addr: SocketAddr) -> AsyncRes {
         let mut handler = ColdHands::new(watcher);
         let mut stream = Framed::new(stream, DracarysFramer::new());
+        info!("New Ranger connected from: {}", addr);
 
         loop {
             match stream.next().await {
                 Some(Ok(msg)) => {
-                    info!("Nightfort rx: {:?}", msg);
+                    // info!("Nightfort rx: {:?}", msg);
                     handler.process(msg).await?;
                 },
-                _ => {
+                Some(Err(e)) => {
+                    error!("Nightfor met error: {:?}", e);
                     return Ok(());
-                }
+                },
+                None => {}
             }
         }
     }

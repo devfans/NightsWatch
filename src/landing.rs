@@ -31,6 +31,4 @@ impl Landing {
             self.nightfort_listen_bind = nightfort_listen_bind.to_string();
         }
     }
-    
-
 }

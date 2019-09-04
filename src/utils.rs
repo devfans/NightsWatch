@@ -1,9 +1,10 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH, Duration, Instant};
 use serde_json::Value;
 use serde_json::map::Map;
 use serde_json::value::Index;
 use std::error::Error;
 use std::fmt;
+use tokio::timer::delay;
 
 pub type JsonMap = Map<String, Value>;
 #[allow(dead_code)]
@@ -90,4 +91,10 @@ impl Error for CodecError {
 	fn description(&self) -> &str {
 		"Bad data"
 	}
+}
+
+#[allow(dead_code)]
+pub async fn sleep(sleep_ms: u64) -> AsyncRes {
+    delay(Instant::now() + Duration::from_millis(sleep_ms)).await;
+    Ok(())
 }

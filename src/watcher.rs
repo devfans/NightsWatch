@@ -1,5 +1,5 @@
 
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, Weak};
 use crate::application::*; 
 use serde_json::Value;
 use crate::node::*;
@@ -112,11 +112,16 @@ impl Watcher {
         }
     }
 
-    pub fn allocate_ranger(&self, name: &String, paths: &Vec<String>, raw: &Value) -> Arc<Node> {
+    pub fn locate_node (&self, path: &String) -> Option<Weak<Node>> {
+        self.store.get_weak_node(path)
+    }
+
+    pub fn allocate_ranger(&self, name: &String, paths: &Vec<String>, raw: &Value) -> Option<Weak<Node>> {
         // Create new leaf node
         // Link to parents
         // Activate application init_nodes
         let node = self.store.add_leaf_node(name, raw);
+        let ranger = Arc::downgrade(&node);
         let mut leaf = node.write().unwrap();
         for path in paths.iter() {
             if let Some(app) = AppMeta::parse_app_name(path) {
@@ -126,6 +131,7 @@ impl Watcher {
                     let mut state = parent_node.write().unwrap();
                     state.add_child(Arc::downgrade(&node));
                     leaf.add_parent(parent);
+                    return Some(ranger);
                 } else {
                     warn!("Failed to find parent: {}", path);
                 }
@@ -134,7 +140,7 @@ impl Watcher {
                 warn!("Failed to parse app name from path: {}", path);
             }
         }
-        node.clone()
+        None
     }
 
     pub async fn start(&mut self) -> Result<(), Box<dyn Error>> {

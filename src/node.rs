@@ -43,13 +43,14 @@ impl NodePathLockerProto {
         *locked = self.locks.insert(path.clone()); 
     }
 
-    pub fn lock_paths(&mut self, paths: &HashSet<String>, locked: &mut bool) {
+    pub fn lock_paths(&mut self, paths: &HashSet<String>, locked: &mut bool, failed_path: &mut String) {
         let mut locked_paths: HashSet<&String>= HashSet::new();
         let mut success = true;
         for path in paths.iter() {
             if self.locks.insert(path.clone()) {
                 locked_paths.insert(path);
             } else {
+                *failed_path = path.clone();
                 success = false;
                 break;
             }
@@ -83,18 +84,18 @@ impl NodeHodor {
         }
     }
 
-    pub async fn try_lock(&self, locked: &mut bool) -> AsyncRes {
+    pub async fn try_lock(&self, locked: &mut bool, failed_path: &mut String) -> AsyncRes {
         let mut locker = self.locker.lock().unwrap();
-        locker.lock_paths(&self.paths, locked);
+        locker.lock_paths(&self.paths, locked, failed_path);
         Ok(())
     } 
 
-    pub async fn try_get_locked(&self, locked: &mut bool, sleep_ms: u64) -> AsyncRes {
-        self.try_lock(locked).await?;
+    pub async fn try_get_locked(&self, locked: &mut bool, failed_path: &mut String, sleep_ms: u64) -> AsyncRes {
+        self.try_lock(locked, failed_path).await?;
         if !*locked {
             delay(Instant::now() + Duration::from_millis(sleep_ms as u64)).await;
         }
-        self.try_lock(locked).await?;
+        self.try_lock(locked, failed_path).await?;
         Ok(())
     }
 

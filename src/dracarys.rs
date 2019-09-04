@@ -30,6 +30,7 @@ pub enum Dracarys {
     },
 }
 
+#[derive(Clone)]
 pub struct DracarysFramer {
 }
 
@@ -44,6 +45,7 @@ impl codec::Encoder for DracarysFramer {
     type Error = io::Error;
 
     fn encode(&mut self, msg: Dracarys, res: &mut bytes::BytesMut) -> Result<(), io::Error> {
+        info!("Sending message: {:?}", msg);
         match msg {
             Dracarys::Target { id, ref paths, ref name, ref extra} => {
                 let path_count = paths.len();
@@ -93,33 +95,45 @@ impl codec::Decoder for DracarysFramer {
     type Error = io::Error;
 
     fn decode(&mut self, bytes: &mut bytes::BytesMut) -> Result<Option<Dracarys>, io::Error> {
-        if bytes.len() < 8 { return Ok(None) }
+        // info!("Receiving {:?}", bytes.len());
+        if bytes.len() < 8 { 
+            // error!("Failed to decode message: {:?}", bytes);
+            return Ok(None); 
+        }
         let len = utils::get_u32_le(&bytes[2..6]) as usize;
-        if bytes.len() < len { return Ok(None) }
+        if bytes.len() < len {
+            error!("Failed to decode message: {:?}", bytes);
+            return Ok(None);
+        }
         let id = utils::get_u16_le(&bytes[6..8]);
         let flag = utils::get_u16_le(&bytes[0..2]);
         let mut pos: usize = 8;
+
         macro_rules! read_string {
             () => {
                 {
                     if pos + 2 > len {
+                        error!("Failed to decode message: {:?}", bytes);
                         return Err(io::Error::new(io::ErrorKind::InvalidData, utils::CodecError));
                     }
                     let size = utils::get_u16_le(&bytes[pos..pos+2]) as usize;
                     pos += 2;
                     if pos + size > len {
+                        error!("Failed to decode message: {:?}", bytes);
                         return Err(io::Error::new(io::ErrorKind::InvalidData, utils::CodecError));
                     }
                     pos += size;
-                    match String::from_utf8(bytes[pos..pos+size].to_vec()) {
+                    match String::from_utf8(bytes[pos-size..pos].to_vec()) {
                         Ok(string) => string,
                         Err(_) => {
+                            error!("Failed to decode message: {:?}", bytes);
                             return Err(io::Error::new(io::ErrorKind::InvalidData, utils::CodecError));
                         },
                     }
                 }
             }
         }
+        let mut msg: Dracarys;
         match flag {
             0xe001 => {
                 let path_count = bytes[pos] as usize;
@@ -130,33 +144,35 @@ impl codec::Decoder for DracarysFramer {
                 }
                 let name = read_string!();
                 let extra = read_string!();
-                let msg = Dracarys::Target {
+                msg = Dracarys::Target {
                     id,
                     paths,
                     name,
                     extra,
                 };
                 bytes.advance(pos);
-                Ok(Some(msg))
             },
             0xe002 => {
                 let health_status = bytes[pos] as u8; 
-                let msg = Dracarys::Report {
+                pos += 1;
+                msg = Dracarys::Report {
                     id,
                     health_status,
                 };
-                bytes.advance(7);
-                Ok(Some(msg))
+                bytes.advance(pos);
             },
             0xe003 => {
                 let data = read_string!();
                 bytes.advance(pos);
-                Ok(Some(Dracarys::Message { id, data }))
+                msg = Dracarys::Message { id, data };
             },
             _ => {
+                error!("Failed to decode message for unknown flag: {:?}", flag);
                 return Err(io::Error::new(io::ErrorKind::InvalidData, utils::CodecError));
             }
         }
+        // info!("Rx: {:?}", msg);
+        Ok(Some(msg))
     }
 }
 
