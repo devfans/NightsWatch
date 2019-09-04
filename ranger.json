@@ -14,6 +14,14 @@
       "paths": [".sample-application.service2"],
       "interval": 10,
       "extra": {}
+    },
+    "2": {
+      "check_script": "",
+      "name": "ranger1",
+      "paths": [".null-application.service2"],
+      "interval": 10,
+      "extra": {}
     }
+
   }
 }

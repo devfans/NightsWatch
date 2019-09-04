@@ -31,8 +31,12 @@ impl ColdHands {
     pub async fn process(&mut self, msg: Dracarys) -> AsyncRes {
         match msg {
             Dracarys::Target { id, ref paths, ref name, ref extra } => {
-                // Try to lock paths first before create a leaf node
                 let watcher = self.watcher.upgrade().unwrap();
+                // Check if any parent exist first
+                if watcher.locate_node_with_paths(paths).is_none() {
+                    error!("No parent exists for this ranger: {:?}", msg);
+                    return Ok(());
+                }
                 let mut locked = false;
                 let mut failed_path: String = String::new();
                 let mut lock_paths = Vec::new();
@@ -43,6 +47,7 @@ impl ColdHands {
                 // Try locate the node with paths first to void locking
                 leaf = watcher.locate_node_with_paths(&lock_paths);
                 if leaf.is_none() {
+                    // Try to lock paths first before create a leaf node
                     let locker = watcher.new_locker(&lock_paths);
                     locker.try_lock(&mut locked, &mut failed_path).await?;
                     if locked {

@@ -21,9 +21,9 @@ log = "*"
 env_logger = "*"
 tokio = "=0.2.0-alpha.4"
 tokio-timer = "=0.3.0-alpha.4"
+tokio-net = { version = "=0.2.0-alpha.4", features = ["process"] }
 bytes = "0.4"
 futures-preview = "=0.3.0-alpha.18"
 futures-core-preview = "=0.3.0-alpha.18"
 futures-sink-preview = "=0.3.0-alpha.18"
 futures-util-preview = { version = "=0.3.0-alpha.18", features = ["sink"] }
-
