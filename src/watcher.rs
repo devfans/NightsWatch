@@ -116,6 +116,14 @@ impl Watcher {
         self.store.get_weak_node(path)
     }
 
+    pub fn locate_node_with_paths (&self, paths: &Vec<String>) -> Option<Weak<Node>> {
+        for path in paths.iter() {
+            let res = self.locate_node(path);
+            if !res.is_none() { return res; }
+        }
+        None
+    }
+
     pub fn allocate_ranger(&self, name: &String, paths: &Vec<String>, raw: &Value) -> Option<Weak<Node>> {
         // Create new leaf node
         // Link to parents

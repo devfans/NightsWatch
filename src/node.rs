@@ -231,6 +231,9 @@ impl NodeProto {
 
     pub fn calculate_health(&mut self) {
         // default script to check health status of the node
+        if let NodeType::Leaf = self.node_type {
+            return;
+        }
         let mut count: u32 = 0;
         let mut amount: u32 = 0;
         for node in self.children.iter() {

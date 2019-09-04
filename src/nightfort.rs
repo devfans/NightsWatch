@@ -33,33 +33,40 @@ impl ColdHands {
             Dracarys::Target { id, ref paths, ref name, ref extra } => {
                 // Try to lock paths first before create a leaf node
                 let watcher = self.watcher.upgrade().unwrap();
-                let locker = watcher.new_locker(paths);
                 let mut locked = false;
                 let mut failed_path: String = String::new();
-                locker.try_lock(&mut locked, &mut failed_path).await?;
-                if locked {
-                    // Create leaf node and link to parents
-                    let raw = match serde_json::from_str(extra) {
-                        Ok(raw) => raw,
-                        Err(_) => json!({}),
-                    };
-                    if let Some(ranger) = watcher.allocate_ranger(name, paths, &raw) {
-                        self.hands.insert(id, ranger);
-                        info!("Successfully allocated/found the ranger for {:?}", msg);
-                    } else {
-                        warn!("Failed to allocate the ranger");
+                let mut lock_paths = Vec::new();
+                for path in paths.iter() {
+                    lock_paths.push(path.clone() + "." + name);
+                }
+                let mut leaf: Option<Weak<Node>> = None;
+                // Try locate the node with paths first to void locking
+                leaf = watcher.locate_node_with_paths(&lock_paths);
+                if leaf.is_none() {
+                    let locker = watcher.new_locker(&lock_paths);
+                    locker.try_lock(&mut locked, &mut failed_path).await?;
+                    if locked {
+                        // Try locate again
+                        leaf = watcher.locate_node_with_paths(&lock_paths);
+                        if leaf.is_none() {
+                            // Create leaf node and link to parents
+                            let raw = match serde_json::from_str(extra) {
+                                Ok(raw) => raw,
+                                Err(_) => json!({}),
+                            };
+                            leaf = watcher.allocate_ranger(name, paths, &raw);
+                        }
+                        locker.unlock().await?;
+                    } else if !failed_path.is_empty() {
+                        delay(Instant::now() + Duration::from_millis(200)).await;
+                        leaf = watcher.locate_node(&failed_path);
                     }
-                    locker.unlock().await?;
+                }
+                if let Some(ranger) = leaf {
+                    self.hands.insert(id, ranger);
+                    info!("Successfully allocated/found the ranger for {:?}", msg);
                 } else {
-                    delay(Instant::now() + Duration::from_millis(200)).await;
-                    if failed_path.is_empty() {
-                        warn!("Failed to lock requested node paths: {:?}", msg);
-                    } else if let Some(ranger) = watcher.locate_node(&failed_path) {
-                        self.hands.insert(id, ranger);
-                        info!("Successfully allocated/found the ranger for {:?}", msg);
-                    } else {
-                        warn!("Failed to find the ranger: {:?}", msg);
-                    }
+                    warn!("Failed to Find or allocate the ranger");
                 }
             },
             Dracarys::Report { id, health_status } => {
@@ -68,7 +75,7 @@ impl ColdHands {
                         let mut state = state.write().unwrap();
                         state.health_status = health_status;
                         state.health_last_check = utils::now();
-                        info!("Successfully updated health status for range with id {}", id);
+                        info!("Successfully updated health status for ranger with id {}", id);
                     } else {
                         warn!("Failed to get the target node for report {:?}", msg);
                     }
@@ -138,7 +145,7 @@ impl Nightfort {
                     return Ok(());
                 },
                 None => { 
-                    warn!("We lost connection with this ranger!");
+                    warn!("We lost connection with this ranger from {}", addr);
                     return Ok(());
                 }
             }
