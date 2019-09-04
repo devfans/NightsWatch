@@ -137,7 +137,10 @@ impl Nightfort {
                     error!("Nightfor met error: {:?}", e);
                     return Ok(());
                 },
-                None => {}
+                None => { 
+                    warn!("We lost connection with this ranger!");
+                    return Ok(());
+                }
             }
         }
     }
