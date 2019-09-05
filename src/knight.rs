@@ -50,9 +50,14 @@ impl<MessageType: Send + Sync, WineProvider: 'static + Wine<MessageType> + Send 
                         info!("Connected to {}", addr);
                         let handler = us.clone();
                         tokio::spawn( async move {
-                            match rx.next().await {
-                                Some(Ok(msg)) => { handler.wine.drink(msg); },
-                                _ => { warn!("Potential disconnection from remote side"); },
+                            loop {
+                                match rx.next().await {
+                                    Some(Ok(msg)) => { handler.wine.drink(msg); },
+                                    _ => { 
+                                        warn!("Potential disconnection from remote side");
+                                        break;
+                                    },
+                                }
                             }
                         });
                         /* match tx.send_all(&mut updates).await {
