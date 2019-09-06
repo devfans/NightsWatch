@@ -68,7 +68,9 @@ impl<MessageType: Send + Sync, WineProvider: 'static + Wine<MessageType> + Send 
                             match messenger.next().await {
                                 Some(msg) => {
                                     match tx.send(msg).await {
-                                        Ok(_) => { info!("Message sent"); }
+                                        Ok(_) => {
+                                            // info!("Message sent");
+                                        }
                                         Err(e) => {
                                             error!("Connection broken! error: {:?}", e);
                                             break;

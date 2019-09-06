@@ -257,6 +257,7 @@ impl Wine<Dracarys> for Arc<Ranger> {
     }
 
     fn wake_up(&self) -> Self::Stream {
+        info!("Ranger gets connected with Nightfort");
         let (tx, rx) = mpsc::unbounded_channel();
         // self.messenger = Some(tx);
         self.start_watch(tx);
