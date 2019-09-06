@@ -1,27 +1,36 @@
 {
   "nightfort": "0.0.0.0:6000",
-  "targets": {
-    "0": {
-      "check_script": "",
+  "targets": [
+    {
+      "watch": {
+        "type": "watch_output",
+        "prog": "echo",
+        "args": ["1"]
+      },
+      "default_health": 122,
       "name": "ranger0",
       "paths": [".sample-application.service1"],
       "interval": 10,
       "extra": {}
     },
-    "1": {
-      "check_script": "",
+    {
+      "watch": {
+        "type": "watch_exit",
+        "prog": "bash",
+        "args": ["./check_test.sh"]
+      },
+      "default_health": 125,
       "name": "ranger1",
       "paths": [".sample-application.service2"],
       "interval": 10,
       "extra": {}
     },
-    "2": {
-      "check_script": "",
+    {
+      "watch": {},
       "name": "ranger1",
       "paths": [".null-application.service2"],
       "interval": 10,
       "extra": {}
     }
-
-  }
+  ]
 }

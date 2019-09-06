@@ -79,7 +79,7 @@ impl ColdHands {
                     if let Some(state) = node.upgrade() {
                         let mut state = state.write().unwrap();
                         state.health_status = health_status;
-                        state.health_last_check = utils::now();
+                        state.health_last_report = utils::now();
                         info!("Successfully updated health status for ranger with id {}", id);
                     } else {
                         warn!("Failed to get the target node for report {:?}", msg);

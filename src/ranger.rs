@@ -8,13 +8,16 @@ use std::sync::{Arc, Mutex};
 use crate::utils;
 use tokio::timer::delay;
 use std::time::{Duration, Instant};
-use tokio_net::process;
+use tokio_net::process::Command;
 // Sample configuration
 //
 // nightfort: 127.0.0.1:6000
 // targets:
-//  1:
-//    check_script:
+//  - watch:
+//      program:
+//      args: []
+//      type:
+//    default_health: 0
 //    paths:
 //      - .app1.service1
 //      - .app2.service2
@@ -24,7 +27,8 @@ use tokio_net::process;
 //      display_name: ""
 //      description: ""
 //      ...
-//  2:
+//
+//  - watch:
 //  ...
 //    
 //
@@ -36,9 +40,17 @@ pub struct State {
     health_history: VecDeque<u8>,
 }
 
+pub enum TargetCheckType {
+    WatchExit,
+    WatchOutput,
+}
+
 pub struct Target {
     id: u16,
-    check_script: String,
+    check_prog: String,
+    check_args: Vec<String>,
+    check_type: TargetCheckType,
+    default_health: u8,
     paths: Vec<String>,
     name: String,
     interval: u64,
@@ -49,7 +61,50 @@ pub struct Target {
 
 impl Target {
     pub async fn check_health(&self, health_status: &mut u8) -> AsyncRes {
-        *health_status = 100;
+        let mut success = false;
+        *health_status = self.default_health;
+
+        if self.check_prog.len() < 1 { return Ok(()); }
+
+        let mut bin = Command::new(self.check_prog.clone());
+        let cmd = bin.args(&self.check_args);
+
+        if let TargetCheckType::WatchOutput = self.check_type {
+            match cmd.output().await {
+                Ok(res) => {
+                    success = true;
+                    let mut max = 10;
+                    if res.stdout.len() < max { max = res.stdout.len() }
+                    let slice = &res.stdout[..max];
+                    match String::from_utf8(slice.to_vec()) {
+                        Ok(output_str) => {
+                            let output = output_str.trim();
+                            match output.parse::<u8>() {
+                                Ok(health) => { *health_status = health; }
+                                _ => error!("Failed to parse health status from output: {}", output),
+                            }
+
+                            info!("{}", output);
+                        },
+                        Err(e) => { error!("Failed to convert check output to string, {}", e); }
+                    }
+                },
+                _ => {}
+            }
+        } else {
+            if let Ok(child) = cmd.spawn() {
+                match child.await {
+                    Ok(status) => {
+                        success = true;
+                        *health_status = status.code().unwrap_or(self.default_health as i32) as u8;
+                    },
+                    _ => {}
+                }
+            }
+        }
+        if !success {
+            error!("Failed to run check command! {}, {:?}", self.check_prog, self.check_args);
+        }
         Ok(())
     }
 }
@@ -64,18 +119,12 @@ impl Map {
     pub fn new(raw: &Value) -> Map {
         let mut map = HashMap::new(); 
         let nightfort = raw.get_str("nightfort", "127.0.0.1:6000");
-        if let Some(targets) = raw["targets"].as_object() {
-            for (id, info) in targets.iter() {
-                let target_id: u16;
-                match id.parse::<u16>() {
-                    Ok(id) => {
-                        target_id = id;
-                    },
-                    Err(_) => {
-                        error!("Invalid target id: {}", id);
-                        continue;
-                    },
-                }
+        if let Some(targets) = raw["targets"].as_array() {
+            for (index, info) in targets.iter().enumerate() {
+                // target id
+                let target_id = index as u16;
+
+                // target path
                 let mut paths = Vec::new();
                 if let Some(paths_info) = info["paths"].as_array() {
                     for path in paths_info.iter() {
@@ -88,20 +137,44 @@ impl Map {
                     error!("At least one invalid parent path should be specified for leaf node");
                     continue;
                 }
+
+                // target stats
                 let state = State {
                     last_check: 0,
                     health_status: 0,
                     health_history: VecDeque::new(),
                 };
-                let target = Target {
+
+                // target body
+                let mut target = Target {
                     id: target_id,
-                    check_script: info.get_str("check_script", ""),
+                    check_prog: String::new(),
+                    check_type: TargetCheckType::WatchOutput,
+                    check_args: Vec::new(),
                     name: info.get_str("name", "new-leaf-node"),
                     interval: info.get_u64("interval", 10),
                     extra: info["extra"].clone(),
                     paths,
+                    default_health: info.get_u64("default_health", 0) as u8,
                     state: Arc::new(Mutex::new(state)),
                 };
+
+                // target check
+                if info["watch"].is_object() {
+                    target.check_prog = info["watch"].get_str("prog", "");
+                    if info["watch"].get_str("type", "") == "watch_exit" {
+                        target.check_type = TargetCheckType::WatchExit;
+                    }
+                    if let Some(args) = info["watch"]["args"].as_array() {
+                        for arg in args.iter() {
+                            if let Some(arg) = arg.as_str() {
+                                target.check_args.push(arg.to_string());
+                            }
+                        }
+                    }
+                }
+
+                // insert target into map
                 map.insert(target_id, Arc::new(target));
             }
         }

@@ -203,7 +203,6 @@ pub struct NodeProto {
     
     pub alert_enabled: bool,
     pub alert_description: String,
-    pub alert_severity_eval: Option<String>,
 
     pub health_status: u8,
     pub health_check_eval: Option<String>,
@@ -289,7 +288,6 @@ impl StoreOps for Arc<Store> {
 
             alert_enabled: true,
             alert_description: String::new(),
-            alert_severity_eval: None,
             health_status: 0,
             health_check_eval: None,
             health_check_type: HealthCheckType::Timer,
