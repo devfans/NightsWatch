@@ -15,6 +15,18 @@
     },
     {
       "watch": {
+        "type": "watch_output",
+        "prog": "bash",
+        "args": ["./check_test_out.sh"]
+      },
+      "default_health": 123,
+      "name": "ranger01",
+      "paths": [".sample-application.service1"],
+      "interval": 10,
+      "extra": {}
+    },
+    {
+      "watch": {
         "type": "watch_exit",
         "prog": "bash",
         "args": ["./check_test.sh"]
