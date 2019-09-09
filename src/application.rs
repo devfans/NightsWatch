@@ -26,7 +26,7 @@ use serde_json::Value;
 use crate::node::*;
 use crate::utils::*;
 use log::{info};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 
 pub type Application = RwLock<ApplicationProto>;
 
@@ -35,6 +35,8 @@ pub struct ApplicationProto {
     root: Weak<Node>,
     nodes_init: bool,  // Flag to re-draw the achitecture of the app
     nodes: Arc<RwLock<NodeQ>>,
+    nodes_by_depth: Arc<RwLock<HashMap<usize, Vec<Weak<Node>>>>>,
+    depth: usize,
     last_tick: u64,
     store: Arc<Store>,
 }
@@ -47,7 +49,9 @@ impl ApplicationProto {
             root: Weak::new(),
             nodes_init: true,
             nodes: Arc::new(RwLock::new(Vec::new())),
+            nodes_by_depth: Arc::new(RwLock::new(HashMap::new())),
             last_tick: 0,
+            depth: 0,
             store,
         }))
     }
@@ -80,13 +84,28 @@ impl ApplicationProto {
                 node.tick(tick, &app_name);
             }
         }
+        /*
+        let nodes_by_depth = self.nodes_by_depth.read().unwrap();
+        for i in (1..self.depth + 1).rev() {
+            let items = nodes_by_depth.get(&i).unwrap();
+            for item in items {
+                if let Some(node) = item.upgrade() {
+                    let mut node = node.write().unwrap();
+                    node.tick(tick, &app_name);
+                }
+            }
+        }
+        */
 
     }
 
     fn init_nodes(&mut self) {
         let nodes = self.nodes.clone();
+        let nodes_by_depth = self.nodes_by_depth.clone();
         if let Some(node) = self.root.upgrade() {
             let mut nodes = nodes.write().unwrap();
+            let mut nodes_by_depth = nodes_by_depth.write().unwrap();
+            
             // Flush nodes queue first
             nodes.clear();
             let app_name: String;
@@ -99,9 +118,13 @@ impl ApplicationProto {
                 app_meta = AppMeta::new();
                 app_name = app.name.clone();
                 app_meta.path.append(&app.name);
+                self.depth = app_meta.path.read_depth();
                 app.app_meta_map.insert(app_name.clone(), app_meta.clone());
                 self.store.update_index(&app_meta.path.read(), app.id);
                 nodes.push(self.root.clone());
+                let entry = nodes_by_depth.entry(self.depth).or_insert(Vec::new());
+                entry.push(self.root.clone());
+                
             }
             let mut tasks: VecDeque<InitNodeQ> = VecDeque::new();
             tasks.push_back(InitNodeQ {
@@ -122,8 +145,12 @@ impl ApplicationProto {
                         let mut kid_app_meta = task.app_meta.clone();
                         let mut kid = node.write().unwrap();
                         kid_app_meta.path.append(&kid.name);
+                        self.depth = kid_app_meta.path.read_depth();
                         kid.app_meta_map.insert(app_name.clone(), kid_app_meta.clone());
                         self.store.update_index(&kid_app_meta.path.read(), kid.id);
+                        let entry = nodes_by_depth.entry(self.depth).or_insert(Vec::new());
+                        entry.push(child.clone());
+
                         tasks.push_back(InitNodeQ { 
                             app_meta: kid_app_meta.clone(),
                             nodes: kid.children.clone(),
