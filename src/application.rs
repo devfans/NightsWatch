@@ -108,6 +108,7 @@ impl ApplicationProto {
             
             // Flush nodes queue first
             nodes.clear();
+            nodes_by_depth.clear();
             let app_name: String;
             let app_display_name: String;
             let mut app_meta: AppMeta;
