@@ -31,6 +31,7 @@ use tokio::{
 };
 use std::net::SocketAddr;
 use crate::node::*;
+use crate::metric::Metric;
 use std::collections::HashMap;
 use crate::dracarys::{Dracarys, DracarysFramer};
 use futures::{StreamExt};
@@ -114,6 +115,22 @@ impl ColdHands {
             Dracarys::Message { id, ref data } => {
                 info!("Message from id: {} ranger: {}", id, data);
             },
+            Dracarys::Metric { ref metrics, .. } => {
+                let watcher = self.watcher.upgrade().unwrap();
+                for m in metrics.iter() {
+                    watcher.dispatcher.send_metric((&m.0, &m.1, &m.2).into());
+                }
+                /*
+                if let Some(node) = self.hands.get(&id) {
+                    if let Some(state) = node.upgrade() {
+                        let node = state.read().unwrap();
+                        
+                    }
+                } else {
+                    warn!("Ranger tell false tales: {:?}", msg);
+                }
+                */
+            }
         }
         Ok(())
     }

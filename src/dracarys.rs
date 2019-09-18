@@ -51,6 +51,10 @@ pub enum Dracarys {
         id: u16,
         data: String,
     },
+    Metric {
+        id: u16,
+        metrics: Vec<(String, String, u64)>,
+    }
 }
 
 #[derive(Clone)]
@@ -107,6 +111,26 @@ impl codec::Encoder for DracarysFramer {
                 res.put_u32_le(total_len as u32);
                 res.put_u16_le(id);
                 res.put_slice(data.as_bytes());
+            },
+            Dracarys::Metric { id, ref metrics } => {
+                let count = metrics.len();
+                let mut metric_total_len: usize = 0;
+                for m in metrics.iter() {
+                    metric_total_len += 8 + m.0.len() + m.1.len();
+                }
+                let total_len = 8 + metric_total_len + 1 + count * 4;
+                res.reserve(total_len);
+                res.put_u16_le(0xe004);
+                res.put_u32_le(total_len as u32);
+                res.put_u16_le(id);
+                res.put_u8(count as u8);
+                for m in metrics.iter() {
+                    res.put_u16_le(m.0.len() as u16);
+                    res.put_slice(m.0.as_bytes());
+                    res.put_u16_le(m.1.len() as u16);
+                    res.put_slice(m.1.as_bytes());
+                    res.put_u64_le(m.2);
+                }
             },
         }
         Ok(())
@@ -189,6 +213,21 @@ impl codec::Decoder for DracarysFramer {
                 bytes.advance(pos);
                 msg = Dracarys::Message { id, data };
             },
+            0xe004 => {
+                let count = bytes[pos] as usize;
+                pos += 1;
+                let mut metrics = Vec::new();
+                for _ in 0..count {
+                    metrics.push((read_string!(), read_string!(), utils::get_u64_le(&bytes[pos..pos+8])));
+                    pos += 8;
+                }
+                msg = Dracarys::Metric {
+                    id,
+                    metrics,
+                };
+                bytes.advance(pos);
+            },
+
             _ => {
                 error!("Failed to decode message for unknown flag: {:?}", flag);
                 return Err(io::Error::new(io::ErrorKind::InvalidData, utils::CodecError));

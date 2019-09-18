@@ -103,6 +103,19 @@ pub fn get_u32_le(v: &[u8]) -> u32 {
     v[0] as u32
 }
 
+#[allow(dead_code)]
+#[inline]
+pub fn get_u64_le(v: &[u8]) -> u64 {
+    ((v[7] as u64) << 56) |
+    ((v[6] as u64) << 48) |
+    ((v[5] as u64) << 40) |
+    ((v[4] as u64) << 32) |
+    ((v[3] as u64) << 24) |
+    ((v[2] as u64) << 16) |
+    ((v[1] as u64) << 8) |
+    v[0] as u64
+}
+
 #[derive(Debug)]
 pub struct CodecError;
 impl fmt::Display for CodecError {

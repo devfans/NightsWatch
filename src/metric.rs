@@ -22,25 +22,38 @@ SOFTWARE.
 */
 
 use crate::utils;
-use log::info;
 use std::fmt::Debug;
+use std::convert::From;
 
 #[derive(Debug)]
 pub struct Metric {
-    path: String,
-    timestamp: u64,
-    data: String,
+    pub path: String,
+    pub timestamp: u64,
+    pub time: String,
+    pub value: String,
 }
 
-impl Metric {
-    pub fn new<T: ToString>(name: &String, value: T) -> Self {
-        Self {
-            path: format!("NightsWatch{}", name),
-            timestamp: utils::now(),
-            data: value.to_string()
+impl<A: ToString, B: ToString> From<(A, B)> for Metric {
+    fn from(d: (A, B)) -> Metric {
+        let now = utils::now();
+        Metric {
+            path: d.0.to_string(),
+            timestamp: now,
+            time: now.to_string(),
+            value: d.1.to_string(),
         }
     }
 }
 
 
+impl<A: ToString, B: ToString, C: ToString> From<(A, B, C)> for Metric {
+    fn from(d: (A, B, C)) -> Metric {
+        Metric {
+            path: d.0.to_string(),
+            timestamp: 0,
+            time: d.2.to_string(),
+            value: d.1.to_string(),
+        }
+    }
+}
 

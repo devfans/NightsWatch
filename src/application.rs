@@ -30,7 +30,6 @@ use std::collections::{HashMap, VecDeque};
 use crate::eval::*;
 use crate::dispatcher::*;
 use crate::alert::Alert;
-use crate::metric::Metric;
 
 pub type Application = RwLock<ApplicationProto>;
 
@@ -134,7 +133,8 @@ impl ApplicationProto {
                     }
 
                     if node.metric_enabled && (tick as u32) % node.metric_interval == 0 {
-                        self.dispatcher.send_metric(Metric::new(&app_meta.path.read(), node.health_status));
+                        // self.dispatcher.send_metric(Metric::new(&app_meta.path.read(), node.health_status));
+                        self.dispatcher.send_metric((&app_meta.path.read(), node.health_status).into());
                     }
                 }
 

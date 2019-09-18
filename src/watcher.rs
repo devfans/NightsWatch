@@ -56,7 +56,7 @@ pub struct Watcher {
     app_map: Arc<RwLock<HashMap<String, Arc<Application>>>>,
     store: Arc<Store>,
     state: Arc<RwLock<WatcherState>>,
-    dispatcher: WatcherDispatcher,
+    pub dispatcher: WatcherDispatcher,
     pub locker: Arc<NodePathLocker>,
     pub landing: Arc<RwLock<Landing>>,
 }
