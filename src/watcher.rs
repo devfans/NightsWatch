@@ -36,6 +36,7 @@ use tokio::sync::mpsc;
 use std::error::Error;
 use std::time::{Instant, Duration};
 use tokio::timer::delay;
+use crate::eval::*;
 
 pub struct WatcherState {
     tick: u64,
@@ -175,6 +176,7 @@ impl Watcher {
     }
 
     pub async fn start(&mut self) -> Result<(), Box<dyn Error>> {
+        let mut engine = EvalEngineProto::new_engine();
         let interval: u64;
         let mut last_tick: u64;
         {
@@ -190,11 +192,11 @@ impl Watcher {
             if sleep_ms > 0 {
                 delay(Instant::now() + Duration::from_millis(sleep_ms as u64)).await;
             }
-            self.tick();
+            self.tick(&mut engine);
         }
     }
 
-    pub fn tick(&mut self) {
+    pub fn tick(&mut self, eval: &mut EvalEngineProto) {
         info!("Watcher starts to stare at white walkers");
         let tick: u64;
         {
@@ -208,7 +210,7 @@ impl Watcher {
         let apps = self.app_map.read().unwrap();
         for app in apps.values() {
             let mut state = app.write().unwrap();
-            state.tick(tick);
+            state.tick(tick, eval);
         }
         {
             let mut state = self.state.write().unwrap();

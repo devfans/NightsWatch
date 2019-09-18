@@ -42,6 +42,7 @@ mod maester;
 mod nightfort;
 mod knight;
 mod ranger;
+mod eval;
 
 use utils::*;
 

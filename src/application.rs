@@ -27,6 +27,7 @@ use crate::node::*;
 use crate::utils::*;
 use log::{info};
 use std::collections::{HashMap, VecDeque};
+use crate::eval::*;
 
 pub type Application = RwLock<ApplicationProto>;
 
@@ -60,13 +61,13 @@ impl ApplicationProto {
         self.nodes_init = true;
     }
 
-    pub fn tick(&mut self, tick: u64) {
+    pub fn tick(&mut self, tick: u64, eval: &mut EvalEngineProto) {
         if self.nodes_init {
             self.init_nodes();
             self.nodes_init = false;
         }
 
-        self.run_tick(tick);
+        self.run_tick(tick, eval);
     }
 
     pub fn read_name(&self) -> String {
@@ -74,14 +75,14 @@ impl ApplicationProto {
         root.upgrade().unwrap().read().unwrap().name.clone()
     }
 
-    fn run_tick(&mut self, tick: u64) {
+    fn run_tick(&mut self, tick: u64, eval: &mut EvalEngineProto) {
         let app_name = self.read_name();
         self.last_tick = tick;
         let nodes = self.nodes.read().unwrap();
         for item in nodes.iter().rev() {
             if let Some(node) = item.upgrade() {
                 let mut node = node.write().unwrap();
-                node.tick(tick, &app_name);
+                node.tick(tick, &app_name, eval);
             }
         }
         /*

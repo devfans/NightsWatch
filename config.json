@@ -3,8 +3,11 @@
   "children": {
     "service1": {
       "children": {
-        "service3": {}
-      }
+        "service3": {},
+        "service4": {},
+        "service5": {}
+      },
+      "health_check_eval": "let x = node.kid(\"service3\") + node.kid(\"service4\"); node.health = 200; node.alert = true; node.severity = 100; "
     },
     "service2": {
     }

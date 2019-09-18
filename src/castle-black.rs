@@ -40,6 +40,7 @@ mod alert;
 mod dracarys;
 mod maester;
 mod nightfort;
+mod eval;
 
 use utils::*;
 

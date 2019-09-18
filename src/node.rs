@@ -30,6 +30,7 @@ use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
 use tokio::timer::delay;
 use std::time::{Instant, Duration};
+use crate::eval::*;
 
 // use log::{warn, info};
 
@@ -229,6 +230,8 @@ pub struct NodeProto {
 
     pub health_status: u8,
     pub health_check_eval: Option<String>,
+    pub health_check_eval_override: Option<String>,
+    pub health_check_eval_change: u64,
     pub health_check_type: HealthCheckType,
     pub health_event_enabled: bool,
     health_check_init: bool,
@@ -243,6 +246,39 @@ pub struct NodeProto {
 }
 
 impl NodeProto {
+    pub fn new() -> Self {
+        Self {
+            id: 0,
+            node_type: NodeType::Node,
+            name: String::new(),
+            display_name: String::new(),
+            description: String::new(),
+            node_created: utils::now(),
+            metric_enabled: true,
+
+            parents: Vec::new(),
+            children: Vec::new(),
+
+            alert_enabled: true,
+            alert_description: String::new(),
+            health_status: 0,
+            health_check_eval: None,
+            health_check_eval_override: None,
+            health_check_eval_change: 0,
+            health_check_type: HealthCheckType::Timer,
+            health_event_enabled: true,
+            health_check_init: true,
+            health_check_source: Weak::new(),
+
+            health_check_tick: 0,
+            health_last_check: 0,
+            health_last_report: 0,
+            health_last_change: 0,
+            app_meta_map: HashMap::new(),
+
+        }
+    }
+
     pub fn add_parent(&mut self, node: Weak<Node>) {
         self.parents.push(node);
     }
@@ -251,31 +287,50 @@ impl NodeProto {
         self.children.push(node);
     }
 
-    pub fn calculate_health(&mut self) {
-        // default script to check health status of the node
-        if let NodeType::Leaf = self.node_type {
-            return;
-        }
-        let mut count: u32 = 0;
-        let mut amount: u32 = 0;
-        for node in self.children.iter() {
-            if let Some(child_node) = node.upgrade() {
-                let child = child_node.read().unwrap();
-                count += 1;
-                amount += child.health_status as u32;
+    pub fn calculate_health(&mut self, eval: &mut EvalEngineProto) {
+        if !self.health_check_eval.is_none() {
+            info!("Evaluating health status for node {} with health script", self.id);
+            eval.node.from_node(&self);
+            eval.eval();
+            self.health_status = eval.node.health;
+        } else {
+            // default script to check health status of the node
+            if let NodeType::Leaf = self.node_type {
+                return;
             }
+            let mut count: u32 = 0;
+            let mut amount: u32 = 0;
+            for node in self.children.iter() {
+                if let Some(child_node) = node.upgrade() {
+                    let child = child_node.read().unwrap();
+                    count += 1;
+                    amount += child.health_status as u32;
+                }
+            }
+            self.health_status = 255;
+            if count > 0 { self.health_status = (amount / count) as u8; }
         }
-        self.health_status = 255;
-        if count > 0 { self.health_status = (amount / count) as u8; }
         self.health_last_check = utils::now();
     }
 
-    pub fn tick(&mut self, tick: u64, app_name: &String) {
+    pub fn tick(&mut self, tick: u64, app_name: &String, eval: &mut EvalEngineProto) {
         if self.health_check_tick > tick {
             panic!("Unexpected check tick of node");
         } else if self.health_check_tick < tick {
             self.health_check_tick = tick;
-            self.calculate_health();
+            // Update eval script if there's new update
+            if let Some(ref script) = self.health_check_eval_override {
+                let success = eval.add_script(script, self.id);
+                if success {
+                    info!("Successfully updated health check script!");
+                    self.health_check_eval = Some(script.clone());
+                    self.health_check_eval_change = utils::now();
+                } else {
+                    error!("Failed to update health check script!");
+                }
+                self.health_check_eval_override = None;
+            }
+            self.calculate_health(eval);
             let app_meta = self.get_app_meta(app_name).unwrap();
             info!("App:{} node {} status evaluated as {}", app_name, app_meta.path.read(), self.health_status);
         }
@@ -293,37 +348,12 @@ pub trait StoreOps {
     fn add_leaf_node(&self, name: &String, raw: &Value) -> Arc<Node>;
     fn update_index(&self, name: &String, index: u64);
     fn get_weak_node(&self, path: &String) -> Option<Weak<Node>>;
+    fn get_node(&self, id: &u64) -> Option<Arc<Node>>;
 }
 
 impl StoreOps for Arc<Store> {
     fn new_node(&self) -> Arc<Node> {
-        let mut node = NodeProto {
-            id: 0,
-            node_type: NodeType::Node,
-            name: String::new(),
-            display_name: String::new(),
-            description: String::new(),
-            node_created: utils::now(),
-            metric_enabled: true,
-
-            parents: Vec::new(),
-            children: Vec::new(),
-
-            alert_enabled: true,
-            alert_description: String::new(),
-            health_status: 0,
-            health_check_eval: None,
-            health_check_type: HealthCheckType::Timer,
-            health_event_enabled: true,
-            health_check_init: true,
-            health_check_source: Weak::new(),
-
-            health_check_tick: 0,
-            health_last_check: 0,
-            health_last_report: 0,
-            health_last_change: 0,
-            app_meta_map: HashMap::new(),
-        };
+        let mut node = NodeProto::new();
         let mut store = self.write().unwrap();
         let id = store.id;
         node.id = id;
@@ -342,6 +372,10 @@ impl StoreOps for Arc<Store> {
             state.alert_enabled = raw.get_bool("alert_enabled", true);
             state.alert_description = raw.get_str("alert_description", "");
             state.health_event_enabled = raw.get_bool("health_event_enabled", true);
+
+            if let Some(script) = raw["health_check_eval"].as_str() {
+                state.health_check_eval_override = Some(script.to_string());
+            }
             
             state.metric_enabled = raw.get_bool("metric_enabled", true);
             state.node_type = NodeType::Node;
@@ -370,6 +404,14 @@ impl StoreOps for Arc<Store> {
     fn update_index(&self, name: &String, index: u64) {
         let mut state = self.write().unwrap();
         state.index.insert(name.clone(), index);
+    }
+
+    fn get_node(&self, id: &u64) -> Option<Arc<Node>> {
+        let state = self.read().unwrap();
+        match state.store.get(id) {
+            Some(node) => Some(node.clone()),
+            None => None
+        }
     }
 
     fn get_weak_node(&self, path: &String) -> Option<Weak<Node>> {
