@@ -39,6 +39,7 @@ pub struct NodeHealth {
     last_report: u64,
     last_status: u8,
     last_check: u64,
+    pub avg_health: u8,  // For default health calculation
     pub alert: bool,
     pub severity: u8,
     pub health: u8,
@@ -52,6 +53,7 @@ impl NodeHealth {
             last_report: 0,
             last_status: 0,
             last_check: 0,
+            avg_health: 0,
             alert: false,
             severity: 0,
             health: 0,
@@ -67,11 +69,17 @@ impl NodeHealth {
         self.severity = 0;
         self.health = 0;
         self.kids.clear();
+        self.avg_health = 255;
+        let kids_count = node.children.len() as u32;
+        let mut kids_total = 0;
         for kid in node.children.iter() {
             let node = kid.upgrade().unwrap();
             let node = node.read().unwrap();
             self.kids.insert(node.name.clone(), node.health_status);
+            kids_total += node.health_status as u32;
         }
+        if kids_count > 0 { self.avg_health = (kids_total / kids_count) as u8; }
+        self.health = self.avg_health;
     }
 
     pub fn apply(&self, node: &Arc<Node>) {
@@ -106,7 +114,7 @@ impl NodeHealth {
     }
 
     pub fn set_health(&mut self, health: i64) {
-        info!("Setting health as {}", health);
+        // info!("Setting health as {}", health);
         self.health = health as u8;
     }
 
@@ -182,7 +190,7 @@ impl EvalEngineProto {
             Err(e) => {
                 error!("{:?}", e);
                 // Override the script if it's invalid
-                self.engine.eval::<()>(&format!("fn fun{}(node) {{}}", node_id)).unwrap();
+                self.engine.eval::<()>(&format!("fn fun{}(node) {{ return node.dump(); }}", node_id)).unwrap();
                 false
             }
         }

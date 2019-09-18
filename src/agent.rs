@@ -43,6 +43,7 @@ mod nightfort;
 mod knight;
 mod ranger;
 mod eval;
+mod dispatcher;
 
 use utils::*;
 

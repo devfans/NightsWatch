@@ -24,6 +24,7 @@ SOFTWARE.
 use std::sync::Weak;
 use crate::node::*;
 
+#[derive(Debug)]
 pub enum EventType {
     HealthDowngrade,
     HealthUpgrade,
@@ -31,6 +32,7 @@ pub enum EventType {
     NodeLeft,
 }
 
+#[derive(Debug)]
 pub struct Event {
     event_type: EventType,
     desc: String,

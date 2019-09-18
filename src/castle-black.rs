@@ -41,6 +41,7 @@ mod dracarys;
 mod maester;
 mod nightfort;
 mod eval;
+mod dispatcher;
 
 use utils::*;
 

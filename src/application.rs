@@ -24,15 +24,18 @@ SOFTWARE.
 use std::sync::{Weak, Arc, RwLock};
 use serde_json::Value;
 use crate::node::*;
-use crate::utils::*;
+use crate::utils::{self, *};
 use log::{info};
 use std::collections::{HashMap, VecDeque};
 use crate::eval::*;
+use crate::dispatcher::*;
+use crate::alert::Alert;
+use crate::metric::Metric;
 
 pub type Application = RwLock<ApplicationProto>;
 
 pub struct ApplicationProto {
-    notification_level: u8,
+    health_alarm_threshold: u8,
     root: Weak<Node>,
     nodes_init: bool,  // Flag to re-draw the achitecture of the app
     nodes: Arc<RwLock<NodeQ>>,
@@ -40,13 +43,14 @@ pub struct ApplicationProto {
     depth: usize,
     last_tick: u64,
     store: Arc<Store>,
+    dispatcher: WatcherDispatcher
 }
 
 
 impl ApplicationProto {
-    pub fn new(store: Arc<Store>) -> Arc<Application> {
+    pub fn new(store: Arc<Store>, dispatcher: WatcherDispatcher) -> Arc<Application> {
         Arc::new(RwLock::new(ApplicationProto {
-            notification_level: 1,
+            health_alarm_threshold: 1,
             root: Weak::new(),
             nodes_init: true,
             nodes: Arc::new(RwLock::new(Vec::new())),
@@ -54,6 +58,7 @@ impl ApplicationProto {
             last_tick: 0,
             depth: 0,
             store,
+            dispatcher,
         }))
     }
 
@@ -82,7 +87,57 @@ impl ApplicationProto {
         for item in nodes.iter().rev() {
             if let Some(node) = item.upgrade() {
                 let mut node = node.write().unwrap();
-                node.tick(tick, &app_name, eval);
+                
+                // Try update script if exists
+                if let Some(ref script) = node.health_check_eval_override {
+                    let success = eval.add_script(script, node.id);
+                    if success {
+                        info!("Successfully updated health check script!");
+                        node.health_check_eval = Some(script.clone());
+                        node.health_check_eval_change = utils::now();
+                    } else {
+                        error!("Failed to update health check script!");
+                    }
+                    node.health_check_eval_override = None;
+                }
+
+                if node.health_check_tick > tick {
+                    panic!("Unexpected check tick of node");
+                } else if node.health_check_tick < tick {
+                    node.health_check_tick = tick;
+
+                    eval.node.from_node(&node);
+                    if !node.health_check_eval.is_none() {
+                        info!("Evaluating health status for node {} with health script", node.id);
+                        eval.eval();
+                    } else {
+                        if eval.node.health <= self.health_alarm_threshold {
+                            eval.node.alert = true;
+                        }
+                    }
+                    node.health_status = eval.node.health;
+                    node.health_last_check = utils::now();
+                    
+                    let app_meta = node.get_app_meta(&app_name).unwrap().clone();
+                    info!("App:{} node {} status evaluated as {}", app_name, app_meta.path.read(), node.health_status);
+
+                    if node.alert_enabled && eval.node.alert {
+                        self.dispatcher.send_alert(Alert {
+                            name: format!("Health Alert for node: {}", node.display_name.clone()),
+                            application: app_name.clone(),
+                            source: item.clone(),
+                            path: app_meta.path.read(),
+                            timestamp: utils::now(),
+                            severity: eval.node.severity,
+                            description: node.alert_description.clone(),
+                        });
+                    }
+
+                    if node.metric_enabled && (tick as u32) % node.metric_interval == 0 {
+                        self.dispatcher.send_metric(Metric::new(&app_meta.path.read(), node.health_status));
+                    }
+                }
+
             }
         }
         /*
@@ -178,8 +233,8 @@ impl ApplicationProto {
 
     pub fn parse(&mut self, raw:& Value) {
         let root = self.store.add_app_node(&raw);
-        if let Some(notification_level) = raw["notification_level"].as_u64() {
-            self.notification_level = notification_level as u8;
+        if let Some(health_alarm_threshold) = raw["health_alarm_threshold"].as_u64() {
+            self.health_alarm_threshold = health_alarm_threshold as u8;
         }
         self.root = Arc::downgrade(&root);
         if let Some(children) = raw["children"].as_object() {

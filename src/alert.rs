@@ -23,13 +23,16 @@ SOFTWARE.
 
 use std::sync::Weak;
 use crate::node::*;
+use crate::eval::NodeHealth;
 
+#[derive(Debug)]
 pub struct Alert {
-    name: String,
-    application: String,
-    source: Weak<Node>,
-    path: String,
-    timestamp: u64,
-    severity: u8,
-    description: String,
+    pub name: String,
+    pub application: String,
+    pub source: Weak<Node>,
+    pub path: String,
+    pub timestamp: u64,
+    pub severity: u8,
+    pub description: String,
 }
+

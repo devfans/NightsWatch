@@ -22,6 +22,7 @@ SOFTWARE.
 */
 
 use std::sync::{Arc, Weak, RwLock, Mutex};
+use std::fmt;
 
 use serde_json::Value;
 use crate::utils::*;
@@ -34,12 +35,14 @@ use crate::eval::*;
 
 // use log::{warn, info};
 
+#[derive(Debug)]
 pub enum NodeType {
     Application,
     Node,
     Leaf,
 }
 
+#[derive(Debug)]
 pub enum HealthCheckType {
     Timer,
     Event,
@@ -51,6 +54,7 @@ pub type NodeQ = Vec<Weak<Node>>;
 pub type NodeIndexStore = HashMap<String, u64>;
 pub type NodePathLocker = Mutex<NodePathLockerProto>;
 
+#[derive(Debug)]
 pub struct NodePathLockerProto {
     locks: HashSet<String>,
 }
@@ -154,6 +158,7 @@ pub struct InitNodeQ {
 }
 
 #[derive(Clone)]
+#[derive(Debug)]
 pub struct AppMeta {
     pub path: NodePath,
 }
@@ -175,6 +180,7 @@ impl AppMeta {
     }
 }
 
+#[derive(Debug)]
 #[derive(Clone)]
 pub struct NodePath {
     path: String,
@@ -212,6 +218,7 @@ impl NodePath {
 
 pub type AppMetaMap = HashMap<String, AppMeta>;
 
+#[derive(Debug)]
 pub struct NodeProto {
     pub id: u64,
     pub node_type: NodeType,
@@ -221,6 +228,7 @@ pub struct NodeProto {
     pub node_created: u64,
 
     pub metric_enabled: bool,
+    pub metric_interval: u32,
 
     pub parents: Vec<Weak<Node>>,
     pub children: Vec<Weak<Node>>,
@@ -255,6 +263,7 @@ impl NodeProto {
             description: String::new(),
             node_created: utils::now(),
             metric_enabled: true,
+            metric_interval: 1,
 
             parents: Vec::new(),
             children: Vec::new(),
@@ -287,6 +296,9 @@ impl NodeProto {
         self.children.push(node);
     }
 
+
+    // TODO: Move to application layer
+    /*
     pub fn calculate_health(&mut self, eval: &mut EvalEngineProto) {
         if !self.health_check_eval.is_none() {
             info!("Evaluating health status for node {} with health script", self.id);
@@ -335,6 +347,7 @@ impl NodeProto {
             info!("App:{} node {} status evaluated as {}", app_name, app_meta.path.read(), self.health_status);
         }
     }
+    */
 
     pub fn get_app_meta(&mut self, app_name: &String) -> Option<&AppMeta> {
         self.app_meta_map.get(app_name)

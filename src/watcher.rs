@@ -37,6 +37,8 @@ use std::error::Error;
 use std::time::{Instant, Duration};
 use tokio::timer::delay;
 use crate::eval::*;
+use crate::dispatcher::*;
+use futures::{StreamExt, Stream, Sink, SinkExt};
 
 pub struct WatcherState {
     tick: u64,
@@ -47,41 +49,6 @@ pub struct WatcherState {
     last_tick_end: u128,
     
     interval: u64,
-}
-
-#[derive(Clone)]
-pub struct WatcherDispatcher {
-    metric_tx: mpsc::UnboundedSender<Metric>,
-    event_tx: mpsc::UnboundedSender<Event>,
-    alert_tx: mpsc::UnboundedSender<Alert>,
-}
-
-impl WatcherDispatcher {
-    pub fn new() -> WatcherDispatcher {
-        let (metric_tx, metric_rx) = mpsc::unbounded_channel();
-        let (event_tx, event_rx) = mpsc::unbounded_channel();
-        let (alert_tx, alert_rx) = mpsc::unbounded_channel();
-        WatcherDispatcher {
-            metric_tx,
-            event_tx,
-            alert_tx,
-        }
-    }
-
-    pub fn send_alert(&self, alert: Alert) {
-        let mut sender = self.alert_tx.clone();
-        let _ = sender.try_send(alert);
-    }
-
-    pub fn send_event(&self, event: Event) {
-        let mut sender = self.event_tx.clone();
-        let _ = sender.try_send(event);
-    }
-
-    pub fn send_metric(&self, metric: Metric) {
-        let mut sender = self.metric_tx.clone();
-        let _ = sender.try_send(metric);
-    }
 }
 
 #[derive(Clone)]
@@ -120,7 +87,7 @@ impl Watcher {
     }
 
     pub fn add_application(&mut self, raw: &Value) {
-        let app = ApplicationProto::new(self.store.clone());
+        let app = ApplicationProto::new(self.store.clone(), self.dispatcher.clone());
         let mut state = app.write().unwrap();
         state.parse(&raw);
         let mut apps = self.app_map.write().unwrap();
