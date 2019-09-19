@@ -24,15 +24,11 @@ SOFTWARE.
 
 use std::sync::{Arc, RwLock, Weak};
 use crate::application::*; 
-use serde_json::Value;
+use serde_json::{map::Map, Value};
 use crate::node::*;
 use crate::utils;
-use crate::metric::*;
-use crate::alert::*;
-use crate::event::*;
 use crate::landing::Landing;
 use std::collections::HashMap;
-use tokio::sync::mpsc;
 use std::error::Error;
 use std::time::{Instant, Duration};
 use tokio::timer::delay;
@@ -160,7 +156,31 @@ impl Watcher {
                 delay(Instant::now() + Duration::from_millis(sleep_ms as u64)).await;
             }
             self.tick(&mut engine);
+            // info!("{}", self.dump().to_string());
         }
+    }
+
+    pub fn dump(&self) -> Value {
+        let mut snapshot = Snapshot::new();
+        let apps = self.app_map.read().unwrap();
+        for app in apps.values() {
+            let app = app.read().unwrap();
+            app.dump(&mut snapshot);
+        }
+        snapshot.dump()
+    }
+
+    pub fn load(&mut self, raw: &mut Value) {
+        let mut snapshot = Snapshot::new();
+        snapshot.load(raw);
+
+        let mut apps = snapshot.deserialize(&self.store, &self.dispatcher);
+        for app in apps.drain(..) {
+            let mut apps = self.app_map.write().unwrap();
+            let app_name = app.read_name();
+            apps.insert(app_name, Arc::new(RwLock::new(app)));
+        }
+        info!("Loaded snapshot!");
     }
 
     pub fn tick(&mut self, eval: &mut EvalEngineProto) {

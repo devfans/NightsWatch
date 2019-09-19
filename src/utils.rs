@@ -28,6 +28,7 @@ use serde_json::value::Index;
 use std::error::Error;
 use std::fmt;
 use tokio::timer::delay;
+use chrono::{ prelude::DateTime, Utc};
 
 pub type JsonMap = Map<String, Value>;
 #[allow(dead_code)]
@@ -44,6 +45,12 @@ pub trait JsonParser {
 #[inline]
 pub fn now() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
+}
+
+#[allow(dead_code)]
+#[inline]
+pub fn read_tsp(secs: u64) -> String {
+    DateTime::<Utc>::from(UNIX_EPOCH + Duration::from_secs(secs)).format("%Y-%m-%d %H:%M:%S.%f").to_string()
 }
 
 #[allow(dead_code)]
@@ -134,3 +141,7 @@ pub async fn sleep(sleep_ms: u64) -> AsyncRes {
     delay(Instant::now() + Duration::from_millis(sleep_ms)).await;
     Ok(())
 }
+
+
+
+

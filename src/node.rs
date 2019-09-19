@@ -24,7 +24,7 @@ SOFTWARE.
 use std::sync::{Arc, Weak, RwLock, Mutex};
 use std::fmt;
 
-use serde_json::Value;
+use serde_json::{self, Value};
 use crate::utils::*;
 use crate::utils::{self, AsyncRes};
 use std::collections::{HashMap, HashSet};
@@ -42,11 +42,25 @@ pub enum NodeType {
     Leaf,
 }
 
+impl fmt::Display for NodeType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+
 #[derive(Debug)]
 pub enum HealthCheckType {
     Timer,
     Event,
 }
+
+impl fmt::Display for HealthCheckType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
 
 pub type Node = RwLock<NodeProto>;
 pub type NodeStore = HashMap<u64, Arc<Node>>;
@@ -296,6 +310,69 @@ impl NodeProto {
         self.children.push(node);
     }
 
+    pub fn serialize(&self) -> Value {
+        let mut parents = Vec::new();
+        let mut children = Vec::new();
+        for p in self.parents.iter() {
+            if let Some(node) = p.upgrade() {
+                parents.push(node.read().unwrap().id);
+            }
+        }
+        for c in self.children.iter() {
+            if let Some(node) = c.upgrade() {
+                children.push(node.read().unwrap().id);
+            }
+        }
+
+        json!({
+            "id": self.id,
+            "node_type": self.node_type.to_string(),
+            "name": self.name,
+            "display_name": self.display_name,
+            "description": self.description,
+            "node_created": self.node_created,
+            "metric_enabled": self.metric_enabled,
+            "metric_interval": self.metric_interval,
+            "parents": parents,
+            "children": children,
+            "alert_enabled": self.alert_enabled,
+            "alert_description": self.alert_description,
+            "health_status": self.health_status,
+            "health_check_eval": self.health_check_eval,
+            "health_check_type": self.health_check_type.to_string(),
+            "health_event_enabled": self.health_event_enabled
+        })
+    }
+
+    pub fn deserialize(&mut self, raw: &Value) {
+        self.name = raw.get_str("name", "new_node");
+        self.display_name = raw.get_str("display_name", "new node");
+        self.description = raw.get_str("description", "");
+        self.node_created = raw.get_u64("node_created", utils::now());
+        self.metric_enabled = raw.get_bool("metric_enabled", true);
+        self.metric_interval = raw.get_u64("metric_interval", 1) as u32;
+        self.alert_enabled = raw.get_bool("alert_enabled", true);
+        self.alert_description = raw.get_str("alert_description", "");
+        self.health_event_enabled = raw.get_bool("health_event_enabled", true);
+        if let Some(script) = raw["health_check_eval"].as_str() {
+            self.health_check_eval_override = Some(script.to_string());
+        }
+        if let Some(node_type) = raw["node_type"].as_str() {
+            let node_type = node_type.to_string();
+            if node_type == NodeType::Application.to_string() {
+                self.node_type = NodeType::Application;
+            } else if node_type == NodeType::Leaf.to_string() {
+                self.node_type = NodeType::Leaf;
+            }
+        }
+        if let Some(check_type) = raw["health_check_type"].as_str() {
+            let check_type = check_type.to_string();
+            if check_type == HealthCheckType::Event.to_string() {
+                self.health_check_type = HealthCheckType::Event;
+            }
+        }
+    }
+
 
     // TODO: Move to application layer
     /*
@@ -370,6 +447,7 @@ pub trait StoreOps {
     fn update_index(&self, name: &String, index: u64);
     fn get_weak_node(&self, path: &String) -> Option<Weak<Node>>;
     fn get_node(&self, id: &u64) -> Option<Arc<Node>>;
+    fn deserialize_node(&self, raw: &Value) -> Arc<Node>;
 }
 
 impl StoreOps for Arc<Store> {
@@ -444,5 +522,17 @@ impl StoreOps for Arc<Store> {
         }
         None
     }
+
+    fn deserialize_node(&self, raw: &Value) -> Arc<Node> {
+        let node = self.new_node();
+        {
+            let mut state = node.write().unwrap();
+            state.deserialize(raw);
+        }
+        node
+    }
 }
+
+
+
 

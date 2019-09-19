@@ -23,6 +23,7 @@ SOFTWARE.
 
 use std::sync::{Weak, Arc, RwLock};
 use serde_json::Value;
+use serde_json::map::Map;
 use crate::node::*;
 use crate::utils::{self, *};
 use log::{info};
@@ -260,6 +261,196 @@ impl ApplicationProto {
         }
     }
 
+    pub fn dump(&self, snapshot: &mut Snapshot) {
+        snapshot.insert_app(&self);
+        let nodes = self.nodes.read().unwrap();
+        for node in nodes.iter() {
+            snapshot.insert_node(node);
+        }
+    }
+
+    pub fn serialize(&self) -> Value {
+        let root = self.root.upgrade().unwrap().read().unwrap().id;
+        json!({
+            "health_alarm_threshold": self.health_alarm_threshold,
+            "depth": self.depth,
+            "root": root
+        })
+    }
+    
+    pub fn deserialize(
+        raw: &Value,
+        store: &Arc<Store>,
+        dispatcher: &WatcherDispatcher,
+        nodes: &Map<String, Value>,
+        state: &mut HashMap<String, u64>,
+        kids_map: &mut HashMap<String, Vec<String>>
+        ) -> ApplicationProto {
+
+        let mut tasks = VecDeque::new();
+        let mut link_tasks = VecDeque::new();
+        let mut app = Self {
+            health_alarm_threshold: raw.get_u64("health_alarm_threshold", 1) as u8,
+            root: Weak::new(),
+            nodes_init: true,
+            nodes: Arc::new(RwLock::new(Vec::new())),
+            nodes_by_depth: Arc::new(RwLock::new(HashMap::new())),
+            last_tick: 0,
+            depth: 0,
+            store: store.clone(),
+            dispatcher: dispatcher.clone(),
+        };
+
+        let root_id: String;
+        if let Some(id) = raw["root"].as_u64() {
+            root_id = id.to_string();
+        } else {
+            error!("Invalid root node id for application!");
+            return app;
+        }
+
+        // Load all application nodes first
+        tasks.push_back(root_id.clone());
+        loop {
+            let task = tasks.pop_front();
+            if task.is_none() {
+                break;
+            }
+            let node_id = task.unwrap();
+            if state.get(&node_id).is_none() {
+                let data = &raw[&node_id];
+                let node = store.deserialize_node(data);
+                let node = node.read().unwrap();
+                state.insert(node_id.clone(), node.id);
+                if let Some(children) = data["children"].as_array() {
+                    for child in children.iter() {
+                        if let Some(kid) = child.as_str() {
+                            tasks.push_back(kid.to_string());
+                            let entry = kids_map.entry(node_id.clone()).or_insert(Vec::new());
+                            entry.push(kid.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        tasks.clear();
+
+        // Set application root node
+        {
+            let root_id = state.get(&root_id).unwrap();
+            let node = store.get_node(root_id).unwrap();
+            app.root = Arc::downgrade(&node);
+            link_tasks.push_back(node);
+        }
+
+        // Try to link the nodes
+        loop {
+            let task = link_tasks.pop_front();
+            if task.is_none() {
+                break;
+            }
+
+            let parent_node = task.unwrap();
+            let parent_id = parent_node.read().unwrap().id;
+            if let Some(kids) = kids_map.get(&parent_id.to_string()) {
+                for kid in kids.iter() {
+                    // Cast to real child node id
+                    if let Some(kid_id) = state.get(kid) {
+                        // Get child node
+                        if let Some(node) = store.get_node(kid_id) {
+                            let mut parent = parent_node.write().unwrap();
+                            parent.add_child(Arc::downgrade(&node));
+                            let mut child = node.write().unwrap();
+                            child.add_parent(Arc::downgrade(&parent_node));
+                            info!("linking parent {} with child {}", parent.name, child.name);
+
+                            // Append child to task queue
+                            link_tasks.push_back(node.clone());
+                        } else {
+                            warn!("Node was not found during linking application, node id {}", kid_id);
+                        }
+                    } else {
+                        warn!("Can not find node real id during linking application, node id {}", kid);
+                    }
+                }
+            }
+        }
+        app
+    }
+
+
+
 }
 
-    
+/// Snapshot serves as node store for Serialize/Deserialize purpose
+pub struct Snapshot {
+    nodes: Map<String, Value>,
+    applications: Map<String, Value>
+}
+
+impl Snapshot {
+    pub fn new() -> Self {
+        Self {
+            nodes: Map::new(),
+            applications: Map::new(),
+        }
+    }
+
+    pub fn insert_node(&mut self, node: &Weak<Node>) {
+        if let Some(node) = node.upgrade() {
+            let node = node.read().unwrap();
+            let id = node.id.to_string();
+            if self.nodes.get(&id).is_none() {
+                self.nodes.insert(id, node.serialize());
+            }
+        }
+    }
+
+    pub fn insert_app(&mut self, app: &ApplicationProto) {
+        let name = app.read_name();
+        if self.applications.get(&name).is_none() {
+            self.applications.insert(name, app.serialize());
+            self.insert_node(&app.root);
+        }
+    }
+
+    pub fn dump(&self) -> Value {
+        json!({
+            "nodes": self.nodes,
+            "applications": self.applications,
+            "date": utils::now()
+        })
+    }
+
+    pub fn load(&mut self, data: &Value) {
+        if let Some(apps) = data["applications"].as_object() {
+            self.applications = apps.clone();
+        }
+        if let Some(nodes) = data["nodes"].as_object() {
+            self.nodes = nodes.clone();
+        }
+        let tsp = match data["date"].as_str() {
+            Some(date) => format!(" created at {}", date.to_string()),
+            None => String::new(),
+        };
+        info!("Loading snapshot {}.", tsp);
+    }
+
+    pub fn deserialize(&self, store: &Arc<Store>, dispatcher: &WatcherDispatcher) -> Vec<ApplicationProto> {
+        let mut state = HashMap::new();
+        let mut kids_map = HashMap::new();
+        let mut apps = Vec::new();
+        for app_data in self.applications.values() {
+            let app = ApplicationProto::deserialize(app_data, store, dispatcher, &self.nodes, &mut state, &mut kids_map);
+            if let Some(_) = app.root.upgrade() {
+                info!("Successfully load application {} from snapshot!", &app.read_name());
+                apps.push(app);
+            } else {
+                error!("Invalid application detected during deserializing snapshot!");
+            }
+        }
+        apps
+    }
+}
+
+   
