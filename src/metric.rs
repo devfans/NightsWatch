@@ -24,6 +24,7 @@ SOFTWARE.
 use crate::utils;
 use std::fmt::Debug;
 use std::convert::From;
+use serde_json::Value;
 
 #[derive(Debug)]
 pub struct Metric {
@@ -54,6 +55,16 @@ impl<A: ToString, B: ToString, C: ToString> From<(A, B, C)> for Metric {
             time: d.2.to_string(),
             value: d.1.to_string(),
         }
+    }
+}
+
+impl From<Metric> for Value {
+    fn from(m: Metric) -> Value {
+        json!({
+            "name": m.path,
+            "time": m.time,
+            "value": m.value
+        })
     }
 }
 

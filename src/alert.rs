@@ -24,6 +24,7 @@ SOFTWARE.
 use std::sync::Weak;
 use crate::node::*;
 use crate::eval::NodeHealth;
+use serde_json::Value;
 
 #[derive(Debug)]
 pub struct Alert {
@@ -34,5 +35,18 @@ pub struct Alert {
     pub timestamp: u64,
     pub severity: u8,
     pub description: String,
+}
+
+impl From<Alert> for Value {
+    fn from(a: Alert) -> Value {
+        json!({
+            "name": a.name,
+            "application": a.application,
+            "path": a.path,
+            "time": a.timestamp,
+            "severity": a.severity,
+            "description": a.description 
+        })
+    }
 }
 

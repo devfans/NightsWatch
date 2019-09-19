@@ -182,7 +182,7 @@ impl codec::Decoder for DracarysFramer {
                 }
             }
         }
-        let mut msg: Dracarys;
+        let msg: Dracarys;
         match flag {
             0xe001 => {
                 let path_count = bytes[pos] as usize;

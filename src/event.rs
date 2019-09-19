@@ -23,6 +23,8 @@ SOFTWARE.
 
 use std::sync::Weak;
 use crate::node::*;
+use serde_json::Value;
+use std::fmt;
 
 #[derive(Debug)]
 pub enum EventType {
@@ -30,6 +32,12 @@ pub enum EventType {
     HealthUpgrade,
     NodeJoin,
     NodeLeft,
+}
+
+impl fmt::Display for EventType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 #[derive(Debug)]
@@ -40,5 +48,17 @@ pub struct Event {
     application: String,
     timestamp: u64,
     path: String,
+}
+
+impl From<Event> for Value {
+    fn from(e: Event) -> Value {
+        json!({
+            "type": e.event_type.to_string(),
+            "description": e.desc,
+            "application": e.application,
+            "time": e.timestamp,
+            "path": e.path
+        })
+    }
 }
 

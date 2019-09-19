@@ -21,7 +21,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use serde_json;
+#[macro_use] extern crate serde_json;
 #[macro_use] extern crate log;
 use env_logger;
 
@@ -42,6 +42,7 @@ mod maester;
 mod nightfort;
 mod eval;
 mod dispatcher;
+
 
 use utils::*;
 
@@ -71,13 +72,11 @@ async fn main() -> AsyncRes {
     let conf_file = fs::File::open(conf).expect("Failed to read config file");
     let config = serde_json::from_reader(conf_file).expect("Failed to parse config file");
 
-    let mut watcher = Watcher::new();
-    watcher.add_application(&config);
-    {
-        let mut landing = watcher.landing.write().unwrap();
-        landing.parse(&config);
-    }
+    let mut landing = landing::Landing::new();
+    landing.parse(&config);
 
+    let mut watcher = Watcher::new(landing);
+    watcher.add_application(&config);
 
     let global_watcher = Arc::new(watcher.clone());
     let mut nightfort = Nightfort::new(&global_watcher);

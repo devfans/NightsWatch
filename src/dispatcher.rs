@@ -37,6 +37,7 @@ use std::time::{Instant, Duration};
 use tokio::timer::delay;
 use crate::eval::*;
 use futures::{StreamExt, Stream, Sink, SinkExt};
+use simple_redis;
 
 
 
@@ -48,35 +49,53 @@ pub struct WatcherDispatcher {
 }
 
 impl WatcherDispatcher {
-    pub fn new() -> WatcherDispatcher {
+    pub fn new(landing: &Landing) -> WatcherDispatcher {
         let (metric_tx, mut metric_rx) = mpsc::unbounded_channel();
         let (event_tx, mut event_rx) = mpsc::unbounded_channel();
         let (alert_tx, mut alert_rx) = mpsc::unbounded_channel();
-        tokio::spawn(async move {
-            loop {
-                match metric_rx.next().await {
-                    Some(msg) => { info!("New metric: {:?}", msg);},
-                    _ => unreachable!(),
+        let redis_publishing = !landing.redis_publish.is_none();
+        macro_rules! dispatch {
+            ($publish: expr, $rx: expr, $chan: expr, $desc: expr, $type: ty) => {
+                {
+                    let publish = $publish.clone();
+                    tokio::spawn(async move {
+                        if !redis_publishing {
+                            loop {
+                                match $rx.next().await {
+                                    Some(msg) => { info!("New {}: {:?}", $desc, msg);},
+                                    _ => unreachable!(),
+                                }
+                            }
+                        } else {
+                            let mut redis = simple_redis::create(&publish).unwrap();
+                            loop {
+                                match $rx.next().await {
+                                    Some(msg) => { 
+                                        let data: Value = (msg as $type).into();
+                                        let string = data.to_string();
+                                        match redis.publish($chan, &string) {
+                                            Ok(_) => { info!("Published {}: {}", $desc, &string); },
+                                            Err(e) => { error!("Failed to publish {} {} error: {:?}", $desc, &string, e); }
+                                        }
+                                    },
+                                    _ => unreachable!(),
+                                }
+                            }
+                        }
+                    });
                 }
             }
-        });
-        tokio::spawn(async move {
-            loop {
-                match event_rx.next().await {
-                    Some(msg) => { info!("New event: {:?}", msg);},
-                    _ => unreachable!(),
-                }
-            }
-        });
-        tokio::spawn(async move {
-            loop {
-                match alert_rx.next().await {
-                    Some(msg) => { info!("New alert: {:?}", msg);},
-                    _ => unreachable!(),
-                }
-            }
-        });
+        }
 
+        let redis_publish = match landing.redis_publish {
+            Some(ref string) => string.clone(),
+            None => String::new(),
+        };
+        
+        dispatch!(&redis_publish, metric_rx, "NightsWatchMetric", "metric", Metric);
+        dispatch!(&redis_publish, event_rx, "NightsWatchEvent", "event", Event);
+        dispatch!(&redis_publish, alert_rx, "NightsWatchAlert", "alert", Alert);
+                    
         WatcherDispatcher {
             metric_tx,
             event_tx,

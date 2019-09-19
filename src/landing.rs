@@ -29,6 +29,7 @@ use serde_json::Value;
 #[derive(Serialize, Deserialize)]
 pub struct Landing {
     pub nightfort_listen_bind: String,
+    pub redis_publish: Option<String>,
     pub watcher_tick_interval: usize,
 }
 
@@ -37,6 +38,7 @@ impl Landing {
     pub fn new() -> Landing {
         Landing {
             nightfort_listen_bind: "0.0.0.0:6000".to_string(),
+            redis_publish: None,
             watcher_tick_interval: 10,
         }
     }
@@ -52,6 +54,9 @@ impl Landing {
         }
         if let Some(nightfort_listen_bind) = raw["nightfort_listen_bind"].as_str() {
             self.nightfort_listen_bind = nightfort_listen_bind.to_string();
+        }
+        if let Some(redis_publish) = raw["redis_publish"].as_str() {
+            self.redis_publish = Some(redis_publish.to_string());
         }
     }
 }

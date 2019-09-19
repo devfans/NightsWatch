@@ -28,3 +28,4 @@ futures-core-preview = "=0.3.0-alpha.18"
 futures-sink-preview = "=0.3.0-alpha.18"
 futures-util-preview = { version = "=0.3.0-alpha.18", features = ["sink"] }
 rhai = { git = "https://github.com/devfans/rhai.git", branch = "nightswatch" }
+simple_redis = "0.3.44"

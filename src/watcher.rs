@@ -62,7 +62,7 @@ pub struct Watcher {
 }
 
 impl Watcher {
-    pub fn new() -> Watcher {
+    pub fn new(landing: Landing) -> Watcher {
         let state = WatcherState {
             tick: 0,
             ticking: false,
@@ -76,9 +76,9 @@ impl Watcher {
             app_map: Arc::new(RwLock::new(HashMap::new())),
             state: Arc::new(RwLock::new(state)),
             store: StoreProto::new(),
-            dispatcher: WatcherDispatcher::new(),
+            dispatcher: WatcherDispatcher::new(&landing),
             locker: NodePathLockerProto::new(),
-            landing: Arc::new(RwLock::new(Landing::new())),
+            landing: Arc::new(RwLock::new(landing)),
         }
     }
     

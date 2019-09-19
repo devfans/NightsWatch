@@ -21,7 +21,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use serde_json;
+#[macro_use] extern crate serde_json;
 #[macro_use] extern crate log;
 use env_logger;
 
