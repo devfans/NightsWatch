@@ -37,7 +37,7 @@ impl<A: ToString, B: ToString> From<(A, B)> for Metric {
     fn from(d: (A, B)) -> Metric {
         let now = utils::now();
         Metric {
-            path: d.0.to_string(),
+            path: format!("NightsWatch{}", &d.0.to_string()),
             timestamp: now,
             time: now.to_string(),
             value: d.1.to_string(),
@@ -49,7 +49,7 @@ impl<A: ToString, B: ToString> From<(A, B)> for Metric {
 impl<A: ToString, B: ToString, C: ToString> From<(A, B, C)> for Metric {
     fn from(d: (A, B, C)) -> Metric {
         Metric {
-            path: d.0.to_string(),
+            path: format!("NightsWatch{}", &d.0.to_string()),
             timestamp: 0,
             time: d.2.to_string(),
             value: d.1.to_string(),

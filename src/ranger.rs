@@ -66,6 +66,8 @@ pub struct State {
 pub enum TargetCheckType {
     WatchExit,
     WatchOutput,
+    WatchExitAndMetric,
+    WatchMetric,
 }
 
 pub struct Target {
@@ -73,6 +75,7 @@ pub struct Target {
     check_prog: String,
     check_args: Vec<String>,
     check_type: TargetCheckType,
+    relative_metric_path: bool,
     default_health: u8,
     paths: Vec<String>,
     name: String,
@@ -83,7 +86,7 @@ pub struct Target {
 }
 
 impl Target {
-    pub async fn check_health(&self, health_status: &mut u8) -> AsyncRes {
+    pub async fn check_health(&self, health_status: &mut u8, metrics: &mut Vec<(String, String)>) -> AsyncRes {
         let mut success = false;
         *health_status = self.default_health;
 
@@ -92,30 +95,77 @@ impl Target {
         let mut bin = Command::new(self.check_prog.clone());
         let cmd = bin.args(&self.check_args);
 
-        if let TargetCheckType::WatchOutput = self.check_type {
+        let mut check_metrics = false;
+        let mut output_status = false;
+        let mut check_output = false;
+        let mut check_exit = false;
+        match self.check_type {
+            TargetCheckType::WatchOutput => {
+                check_output = true;
+                output_status = true;
+            },
+            TargetCheckType::WatchExit => {
+                check_exit = true;
+            },
+            TargetCheckType::WatchExitAndMetric => {
+                check_exit = true;
+                check_output = true;
+                check_metrics = true;
+            },
+            TargetCheckType::WatchMetric => {
+                check_metrics = true;
+                check_output = true;
+            }
+        }
+
+        if check_output {
             match cmd.output().await {
                 Ok(res) => {
                     success = true;
-                    let mut max = 100;
-                    if res.stdout.len() < max { max = res.stdout.len() }
-                    let slice = &res.stdout[..max];
-                    match String::from_utf8(slice.to_vec()) {
-                        Ok(output_str) => {
-                            let output = output_str.trim();
-                            // info!("checking output {}", String::from_utf8(res.stdout).unwrap());
-                            match output.parse::<u8>() {
-                                Ok(health) => { *health_status = health; }
-                                _ => error!("Failed to parse health status from output: {}", output),
-                            }
-
-                            info!("{}", output);
-                        },
-                        Err(e) => { error!("Failed to convert check output to string, {}", e); }
+                    // Check health status from exit code
+                    if check_exit {
+                        *health_status = res.status.code().unwrap_or(self.default_health as i32) as u8;
                     }
+
+                    // Check health status from first 100 bytes of the stdout
+                    if output_status {
+                        let mut max = 100;
+                        if res.stdout.len() < max { max = res.stdout.len() }
+                        let slice = &res.stdout[..max];
+                        match String::from_utf8(slice.to_vec()) {
+                            Ok(output_str) => {
+                                let output = output_str.trim();
+                                // info!("checking output {}", String::from_utf8(res.stdout).unwrap());
+                                match output.parse::<u8>() {
+                                    Ok(health) => { *health_status = health; }
+                                    _ => error!("Failed to parse health status from output: {}", output),
+                                }
+
+                                // info!("{}", output);
+                            },
+                            Err(e) => { error!("Failed to convert check output to string, {}", e); }
+                        }
+                    }
+
+                    // Collect Metrics from stdoutput
+                    if check_metrics {
+                        match String::from_utf8(res.stdout) {
+                            Ok(output_str) => {
+                                for line in output_str.split("\n") {
+                                    let tokens: Vec<&str> = line.split(",").collect();
+                                    if tokens.len() > 1 {
+                                        metrics.push((format!(".{}", tokens[0].trim()), tokens[1].trim().to_string()));
+                                    }
+                                }
+                            },
+                            Err(e) => { error!("Failed to convert check output to string, {}", e); }
+                        }
+                    }
+
                 },
                 _ => {}
             }
-        } else {
+        } else if check_exit {
             if let Ok(child) = cmd.spawn() {
                 match child.await {
                     Ok(status) => {
@@ -174,6 +224,7 @@ impl Map {
                     id: target_id,
                     check_prog: String::new(),
                     check_type: TargetCheckType::WatchOutput,
+                    relative_metric_path: info.get_bool("relative_metric_path", true),
                     check_args: Vec::new(),
                     name: info.get_str("name", "new-leaf-node"),
                     interval: info.get_u64("interval", 10),
@@ -186,8 +237,17 @@ impl Map {
                 // target check
                 if info["watch"].is_object() {
                     target.check_prog = info["watch"].get_str("prog", "");
-                    if info["watch"].get_str("type", "") == "watch_exit" {
+
+                    let check_type = info["watch"].get_str("type", "");
+                    if check_type == "watch_exit" {
+                        // Only check exit code as health status
                         target.check_type = TargetCheckType::WatchExit;
+                    } else if check_type == "watch_metrics" {
+                        // Only check output as metrics
+                        target.check_type = TargetCheckType::WatchMetric;
+                    } else if check_type == "watch_exit_and_metrics" {
+                        // Check exit code as health status and collect metrics from output
+                        target.check_type = TargetCheckType::WatchExitAndMetric;
                     }
                     if let Some(args) = info["watch"]["args"].as_array() {
                         for arg in args.iter() {
@@ -232,28 +292,48 @@ impl Ranger {
             let mut last_check: u64 = 0;
             let mut health_status: u8 = 0;
             let interval = target.interval;
+            let check_health_status = match target.check_type {
+                TargetCheckType::WatchMetric => false,
+                _ => true
+            };
             loop {
                 let sleep_s = (last_check + interval) as i64 - utils::now() as i64;
                 if sleep_s > 0 {
                     delay(Instant::now() + Duration::from_millis(1000 * sleep_s as u64)).await;
                 }
                 last_check = utils::now();
-                match target.check_health(&mut health_status).await {
+                let mut metrics = Vec::new();
+                match target.check_health(&mut health_status, &mut metrics).await {
                     Ok(_) => {
-                        {
-                            let mut state = target.state.lock().unwrap();
-                            state.last_check = last_check;
-                            state.health_status = health_status;
-                            state.health_history.push_back(health_status);
-                            if state.health_history.len() > 50 {
-                                state.health_history.pop_front();
+                        if check_health_status {
+                            {
+                                let mut state = target.state.lock().unwrap();
+                                state.last_check = last_check;
+                                state.health_status = health_status;
+                                state.health_history.push_back(health_status);
+                                if state.health_history.len() > 50 {
+                                    state.health_history.pop_front();
+                                }
                             }
+                            // Send report
+                            let _ = messenger.try_send(Dracarys::Report {
+                                id: target.id,
+                                health_status,
+                            });
                         }
-                        // Send report
-                        let _ = messenger.try_send(Dracarys::Report {
-                            id: target.id,
-                            health_status,
-                        });
+        
+                        if metrics.len() > 0 {
+                            let now = utils::now();
+                            let mut data = Vec::new();
+                            for m in metrics.iter() {
+                                data.push((m.0.clone(), m.1.clone(), now));
+                            }
+                            let _ = messenger.try_send(Dracarys::Metric {
+                                id: target.id,
+                                relative: target.relative_metric_path,
+                                metrics: data,
+                            });
+                        }
                     },
                     Err(e) => {
                         error!("Failed to check target health for failed script execution, error: {:?}", e);

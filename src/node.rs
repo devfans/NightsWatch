@@ -352,6 +352,14 @@ impl NodeProto {
     pub fn get_app_meta(&mut self, app_name: &String) -> Option<&AppMeta> {
         self.app_meta_map.get(app_name)
     }
+
+    pub fn get_paths(&self) -> Vec<String> {
+        let mut paths = Vec::new();
+        for meta in self.app_meta_map.values() {
+            paths.push(meta.path.read());
+        }
+        paths
+    }
 }
 
 pub trait StoreOps {

@@ -38,6 +38,19 @@
       "extra": {}
     },
     {
+      "watch": {
+        "type": "watch_exit_and_metrics",
+        "prog": "bash",
+        "args": ["./check_metrics.sh"]
+      },
+      "relative_metric_path": true,
+      "default_health": 125,
+      "name": "ranger1",
+      "paths": [".sample-application.service2"],
+      "interval": 10,
+      "extra": {}
+    },
+    {
       "watch": {},
       "name": "ranger1",
       "paths": [".null-application.service2"],

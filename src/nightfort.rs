@@ -115,21 +115,26 @@ impl ColdHands {
             Dracarys::Message { id, ref data } => {
                 info!("Message from id: {} ranger: {}", id, data);
             },
-            Dracarys::Metric { ref metrics, .. } => {
+            Dracarys::Metric { id, relative, ref metrics } => {
                 let watcher = self.watcher.upgrade().unwrap();
+                let mut paths = Vec::new();
+                if relative {
+                    if let Some(node) = self.hands.get(&id) {
+                        if let Some(state) = node.upgrade() {
+                            let node = state.read().unwrap();
+                            paths = node.get_paths();
+                        }
+                    } else { warn!("Ranger tell false tales: {:?}", msg); }
+                }
                 for m in metrics.iter() {
-                    watcher.dispatcher.send_metric((&m.0, &m.1, &m.2).into());
-                }
-                /*
-                if let Some(node) = self.hands.get(&id) {
-                    if let Some(state) = node.upgrade() {
-                        let node = state.read().unwrap();
-                        
+                    if relative {
+                        for path in paths.iter() {
+                            watcher.dispatcher.send_metric((format!("{}{}", path, &m.0), &m.1, &m.2).into());
+                        }
+                    } else {
+                        watcher.dispatcher.send_metric((&m.0, &m.1, &m.2).into());
                     }
-                } else {
-                    warn!("Ranger tell false tales: {:?}", msg);
                 }
-                */
             }
         }
         Ok(())
