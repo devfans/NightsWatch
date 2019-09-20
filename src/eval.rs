@@ -200,4 +200,18 @@ impl EvalEngineProto {
 pub type EvalEngine = RwLock<EvalEngineProto>;
 
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_health_check_script() {
+        let mut engine = EvalEngineProto::new_engine();
+        assert!(!engine.add_script("node.health =x 99", 0));
+        assert!(engine.add_script("node.health = 99; node.alert = true", 0));
+        engine.eval();
+        assert_eq!(engine.node.health, 99);
+        assert!(engine.node.alert);
+    }
+}
 
