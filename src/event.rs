@@ -27,6 +27,7 @@ use serde_json::Value;
 use std::fmt;
 
 #[derive(Debug)]
+#[derive(Clone)]
 pub enum EventType {
     HealthDowngrade,
     HealthUpgrade,
@@ -34,13 +35,8 @@ pub enum EventType {
     NodeLeft,
 }
 
-impl fmt::Display for EventType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
 #[derive(Debug)]
+#[derive(Clone)]
 pub struct Event {
     event_type: EventType,
     desc: String,
@@ -50,8 +46,8 @@ pub struct Event {
     path: String,
 }
 
-impl From<Event> for Value {
-    fn from(e: Event) -> Value {
+impl From<&Event> for Value {
+    fn from(e: &Event) -> Value {
         json!({
             "type": e.event_type.to_string(),
             "description": e.desc,

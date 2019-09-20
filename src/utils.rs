@@ -30,6 +30,10 @@ use std::fmt;
 use tokio::timer::delay;
 use chrono::{ prelude::DateTime, Utc};
 use crate::node::{NodeType, HealthCheckType};
+use crate::event::{Event, EventType};
+use crate::alert::Alert;
+use crate::metric::Metric;
+use crate::raven::RavenMessage;
 
 pub type JsonMap = Map<String, Value>;
 #[allow(dead_code)]
@@ -143,7 +147,7 @@ pub async fn sleep(sleep_ms: u64) -> AsyncRes {
     Ok(())
 }
 
-macro_rules! show_name {
+macro_rules! impl_show_name {
     ($type: ty) => {
         impl fmt::Display for $type {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -153,8 +157,31 @@ macro_rules! show_name {
     }
 }
 
-show_name!(NodeType);
-show_name!(HealthCheckType);
+/*
+pub trait ToJson {
+    fn to_json(&self) -> String;
+}
+*/
+
+macro_rules! impl_to_json {
+    ($type: ty) => {
+        impl $type {
+            pub fn to_json(&self) -> String {
+                let data: Value = self.into();
+                data.to_string()
+            }
+        }
+    }
+}
+
+
+impl_show_name!(NodeType);
+impl_show_name!(HealthCheckType);
+impl_show_name!(EventType);
+impl_to_json!(Alert);
+impl_to_json!(Event);
+impl_to_json!(Metric);
+impl_to_json!(RavenMessage<'_>);
 
 
 

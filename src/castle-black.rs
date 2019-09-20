@@ -42,7 +42,7 @@ mod maester;
 mod nightfort;
 mod eval;
 mod dispatcher;
-
+mod raven;
 
 use utils::*;
 
@@ -50,6 +50,7 @@ use watcher::*;
 use nightfort::Nightfort;
 use log::{info, warn};
 use std::sync::Arc;
+use maester::Maester;
 
 #[tokio::main]
 async fn main() -> AsyncRes {
@@ -74,13 +75,16 @@ async fn main() -> AsyncRes {
 
     let mut landing = landing::Landing::new();
     landing.parse(&config);
-
-    let mut watcher = Watcher::new(landing);
+    
+    let maester = Maester::new();
+    let mut watcher = Watcher::new(landing, &maester);
     watcher.add_application(&config);
 
     let global_watcher = Arc::new(watcher.clone());
     let mut nightfort = Nightfort::new(&global_watcher);
+    maester.add_watcher(&global_watcher);
     tokio::spawn( async move { let _ = nightfort.setup().await; } );
+    tokio::spawn( async move { let _ = maester.setup().await; } );
 
     watcher.start().await?;
     warn!("Watcher is being destroyed!!!");

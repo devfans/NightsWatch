@@ -30,6 +30,7 @@ use tokio::sync::mpsc;
 use futures::StreamExt;
 use simple_redis;
 use std::sync::{Arc, Mutex};
+use crate::maester::Maester;
 
 
 pub const REDIS_KEY_METRICS:   &'static str = "NigthsWatchMetrics";
@@ -46,11 +47,12 @@ pub struct WatcherDispatcher {
     event_tx: mpsc::UnboundedSender<Event>,
     alert_tx: mpsc::UnboundedSender<Alert>,
     snapshot_tx: mpsc::UnboundedSender<String>,
+    maester: Arc<Maester>,
     redis_client: Option<Arc<Mutex<simple_redis::client::Client>>>,
 }
 
 impl WatcherDispatcher {
-    pub fn new(landing: &Landing) -> WatcherDispatcher {
+    pub fn new(landing: &Landing, maester: &Arc<Maester>) -> WatcherDispatcher {
         let (metric_tx, mut metric_rx) = mpsc::unbounded_channel();
         let (event_tx, mut event_rx) = mpsc::unbounded_channel();
         let (alert_tx, mut alert_rx) = mpsc::unbounded_channel();
@@ -62,6 +64,7 @@ impl WatcherDispatcher {
             event_tx,
             alert_tx,
             snapshot_tx,
+            maester: maester.clone(),
             redis_client: None,
         };
 
@@ -70,14 +73,17 @@ impl WatcherDispatcher {
         }
 
         macro_rules! dispatch {
-            ($publish: expr, $rx: expr, $chan: expr, $desc: expr, $type: ty) => {
+            ($publish: expr, $rx: expr, $chan: expr, $desc: expr, $type: ty, $handle: expr) => {
                 {
                     let publish = $publish.clone();
                     tokio::spawn(async move {
                         if !redis_publishing {
                             loop {
                                 match $rx.next().await {
-                                    Some(msg) => { info!("New {}: {:?}", $desc, msg);},
+                                    Some(ref msg) => { 
+                                        info!("New {}: {:?}", $desc, msg);
+                                        $handle(msg);
+                                    },
                                     _ => unreachable!(),
                                 }
                             }
@@ -85,11 +91,15 @@ impl WatcherDispatcher {
                             let mut redis = simple_redis::create(&publish).unwrap();
                             loop {
                                 match $rx.next().await {
-                                    Some(msg) => { 
-                                        let data: Value = (msg as $type).into();
+                                    Some(ref msg) => { 
+                                        let data: Value = (msg as &$type).into();
                                         let string = data.to_string();
                                         match redis.publish($chan, &string) {
-                                            Ok(_) => { info!("Published {}: {}", $desc, &string); },
+                                            Ok(_) => { 
+                                                info!("Published {}: {}", $desc, &string);
+                                                // maester_handler.on_received::<$type>(msg);
+                                                $handle(msg);
+                                            },
                                             Err(e) => { error!("Failed to publish {} {} error: {:?}", $desc, &string, e); }
                                         }
                                     },
@@ -107,9 +117,11 @@ impl WatcherDispatcher {
             None => String::new(),
         };
         
-        dispatch!(&redis_publish, metric_rx, REDIS_KEY_METRICS, "metric", Metric);
-        dispatch!(&redis_publish, event_rx, REDIS_KEY_EVENTS, "event", Event);
-        dispatch!(&redis_publish, alert_rx, REDIS_KEY_ALERTS, "alert", Alert);
+        let alert_handler = maester.clone();
+        let event_handler = maester.clone();
+        dispatch!(&redis_publish, metric_rx, REDIS_KEY_METRICS, "metric", Metric, |_| {});
+        dispatch!(&redis_publish, event_rx, REDIS_KEY_EVENTS, "event", Event, |msg| event_handler.on_event(msg));
+        dispatch!(&redis_publish, alert_rx, REDIS_KEY_ALERTS, "alert", Alert, |msg| alert_handler.on_alert(msg));
 
         tokio::spawn(async move {
             if !redis_publishing {

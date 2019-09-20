@@ -27,6 +27,7 @@ use crate::eval::NodeHealth;
 use serde_json::Value;
 
 #[derive(Debug)]
+#[derive(Clone)]
 pub struct Alert {
     pub name: String,
     pub application: String,
@@ -37,8 +38,8 @@ pub struct Alert {
     pub description: String,
 }
 
-impl From<Alert> for Value {
-    fn from(a: Alert) -> Value {
+impl From<&Alert> for Value {
+    fn from(a: &Alert) -> Value {
         json!({
             "name": a.name,
             "application": a.application,

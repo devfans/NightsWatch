@@ -44,6 +44,7 @@ mod knight;
 mod ranger;
 mod eval;
 mod dispatcher;
+mod raven;
 
 use utils::*;
 

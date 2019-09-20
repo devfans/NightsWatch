@@ -35,6 +35,7 @@ use tokio::timer::delay;
 use crate::eval::*;
 use crate::dispatcher::*;
 use futures::{StreamExt, Stream, Sink, SinkExt};
+use crate::maester::Maester;
 
 pub struct WatcherState {
     tick: u64,
@@ -52,13 +53,14 @@ pub struct Watcher {
     app_map: Arc<RwLock<HashMap<String, Arc<Application>>>>,
     store: Arc<Store>,
     state: Arc<RwLock<WatcherState>>,
+    maester: Arc<Maester>,
     pub dispatcher: WatcherDispatcher,
     pub locker: Arc<NodePathLocker>,
     pub landing: Arc<RwLock<Landing>>,
 }
 
 impl Watcher {
-    pub fn new(landing: Landing) -> Watcher {
+    pub fn new(landing: Landing, maester: &Arc<Maester>) -> Watcher {
         let state = WatcherState {
             tick: 0,
             ticking: false,
@@ -72,7 +74,8 @@ impl Watcher {
             app_map: Arc::new(RwLock::new(HashMap::new())),
             state: Arc::new(RwLock::new(state)),
             store: StoreProto::new(),
-            dispatcher: WatcherDispatcher::new(&landing),
+            maester: maester.clone(),
+            dispatcher: WatcherDispatcher::new(&landing, maester),
             locker: NodePathLockerProto::new(),
             landing: Arc::new(RwLock::new(landing)),
         }
@@ -170,7 +173,7 @@ impl Watcher {
         snapshot.dump()
     }
 
-    pub fn load(&mut self, raw: &mut Value) {
+    pub fn load(&self, raw: &mut Value) {
         let mut snapshot = Snapshot::new();
         snapshot.load(raw);
 
@@ -183,7 +186,7 @@ impl Watcher {
         info!("Loaded snapshot!");
     }
 
-    pub fn load_snapshot_from_dispatcher(&mut self) {
+    pub fn load_snapshot_from_dispatcher(&self) {
         match self.dispatcher.command_get_str("LINDEX", vec![REDIS_KEY_SNAPSHOTS, "0"]) {
             Err(e) => {
                 error!("Failed to load snapshot form redis: {:?}", e);

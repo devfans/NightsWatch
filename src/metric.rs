@@ -27,6 +27,7 @@ use std::convert::From;
 use serde_json::Value;
 
 #[derive(Debug)]
+#[derive(Clone)]
 pub struct Metric {
     pub path: String,
     pub timestamp: u64,
@@ -58,8 +59,8 @@ impl<A: ToString, B: ToString, C: ToString> From<(A, B, C)> for Metric {
     }
 }
 
-impl From<Metric> for Value {
-    fn from(m: Metric) -> Value {
+impl From<&Metric> for Value {
+    fn from(m: &Metric) -> Value {
         json!({
             "name": m.path,
             "time": m.time,

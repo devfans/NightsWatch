@@ -21,4 +21,74 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+use crate::event::Event;
+use crate::alert::Alert;
+use serde_json::{self, Value};
+
+pub enum RavenMessage<'a> {
+    TakeSnapshot,
+    LoadSnapshot,
+    NewAlert {
+        data: &'a Alert,
+    },
+    NewEvent {
+        data: &'a Event,
+    },
+    None,
+}
+
+impl<'a> From<&RavenMessage<'a>> for Value {
+    fn from(m: &RavenMessage) -> Value {
+        match m {
+            RavenMessage::TakeSnapshot => {
+                json!({"method": "take_snapshot"})
+            },
+            RavenMessage::LoadSnapshot => {
+                json!({"method": "load_snapshot"})
+            },
+            RavenMessage::NewAlert { data } => {
+                let data: Value = (*data).into();
+                json!({
+                    "method": "new_alert",
+                    "data": data
+                })
+            },
+            RavenMessage::NewEvent { data } => {
+                let data: Value = (*data).into();
+                json!({
+                    "method": "new_event",
+                    "data": data
+                })
+            },
+            _ => unimplemented!()
+        }
+    }
+}
+
+impl<'a> From<&String> for RavenMessage<'a> {
+    fn from(m: &String) -> RavenMessage<'a> {
+        match serde_json::from_str::<Value>(m) {
+            Ok(value) => {
+                match value["method"].as_str() {
+                    Some(method) => {
+                        if method == "take_snapshot" {
+                            RavenMessage::TakeSnapshot
+                        } else {
+                            error!("Unknown rave message method: {}", method);
+                            RavenMessage::None
+                        }
+                    },
+                    None => {
+                        error!("Invalid raven message method: {}", m);
+                        RavenMessage::None
+                    }
+                }
+            },
+            Err(_) => {
+                error!("Invalid raw raven message: {}", m);
+                RavenMessage::None
+            }
+        }
+    }
+}
 
