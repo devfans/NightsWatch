@@ -21,31 +21,32 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use std::sync::{Arc, RwLock, Weak};
-use crate::application::*; 
 use serde_json::Value;
-use crate::node::*;
-use crate::utils;
 use crate::metric::*;
 use crate::alert::*;
 use crate::event::*;
 use crate::landing::Landing;
-use std::collections::HashMap;
 use tokio::sync::mpsc;
-use std::error::Error;
-use std::time::{Instant, Duration};
-use tokio::timer::delay;
-use crate::eval::*;
-use futures::{StreamExt, Stream, Sink, SinkExt};
+use futures::StreamExt;
 use simple_redis;
+use std::sync::{Arc, Mutex};
 
 
+pub const REDIS_KEY_METRICS:   &'static str = "NigthsWatchMetrics";
+pub const REDIS_KEY_EVENTS:    &'static str = "NigthsWatchEvents";
+pub const REDIS_KEY_ALERTS:    &'static str = "NigthsWatchAlerts";
+pub const REDIS_KEY_SNAPSHOTS: &'static str = "NigthsWatchSnapshots";
+
+
+pub type CommandError = simple_redis::types::RedisError;
 
 #[derive(Clone)]
 pub struct WatcherDispatcher {
     metric_tx: mpsc::UnboundedSender<Metric>,
     event_tx: mpsc::UnboundedSender<Event>,
     alert_tx: mpsc::UnboundedSender<Alert>,
+    snapshot_tx: mpsc::UnboundedSender<String>,
+    redis_client: Option<Arc<Mutex<simple_redis::client::Client>>>,
 }
 
 impl WatcherDispatcher {
@@ -53,7 +54,21 @@ impl WatcherDispatcher {
         let (metric_tx, mut metric_rx) = mpsc::unbounded_channel();
         let (event_tx, mut event_rx) = mpsc::unbounded_channel();
         let (alert_tx, mut alert_rx) = mpsc::unbounded_channel();
+        let (snapshot_tx, mut snapshot_rx) = mpsc::unbounded_channel();
         let redis_publishing = !landing.redis_publish.is_none();
+
+        let mut dispatcher = WatcherDispatcher {
+            metric_tx,
+            event_tx,
+            alert_tx,
+            snapshot_tx,
+            redis_client: None,
+        };
+
+        if redis_publishing {
+            dispatcher.redis_client = Some(Arc::new(Mutex::new(simple_redis::create(&landing.redis_publish.as_ref().unwrap().to_string()).unwrap())));
+        }
+
         macro_rules! dispatch {
             ($publish: expr, $rx: expr, $chan: expr, $desc: expr, $type: ty) => {
                 {
@@ -92,15 +107,40 @@ impl WatcherDispatcher {
             None => String::new(),
         };
         
-        dispatch!(&redis_publish, metric_rx, "NightsWatchMetric", "metric", Metric);
-        dispatch!(&redis_publish, event_rx, "NightsWatchEvent", "event", Event);
-        dispatch!(&redis_publish, alert_rx, "NightsWatchAlert", "alert", Alert);
-                    
-        WatcherDispatcher {
-            metric_tx,
-            event_tx,
-            alert_tx,
-        }
+        dispatch!(&redis_publish, metric_rx, REDIS_KEY_METRICS, "metric", Metric);
+        dispatch!(&redis_publish, event_rx, REDIS_KEY_EVENTS, "event", Event);
+        dispatch!(&redis_publish, alert_rx, REDIS_KEY_ALERTS, "alert", Alert);
+
+        tokio::spawn(async move {
+            if !redis_publishing {
+                loop {
+                    match snapshot_rx.next().await {
+                        Some(msg) => info!("New snapshot {}", msg),
+                        _ => unreachable!(),
+                    }
+                }
+            } else {
+                let mut redis = simple_redis::create(&redis_publish).unwrap();
+                loop {
+                    match snapshot_rx.next().await {
+                        Some(ref msg) => {
+                            match redis.run_command_empty_response("LPUSH", vec![REDIS_KEY_SNAPSHOTS, msg]) {
+                                Ok(_) => {
+                                    info!("Saved snapshot into redis!");
+                                    info!("{}", msg);
+                                    // Trim for saving storage
+                                    let _ = redis.run_command_empty_response("LTRIM", vec![REDIS_KEY_SNAPSHOTS, "0", "10"]);
+                                },
+                                Err(e) => { error!("Failed to save snapshot to redis for the moment error {:?} snapshot {}", e, msg); }
+                            }
+                        },
+                        _ => unreachable!(),
+                    }
+                }
+            }
+        });
+
+        dispatcher
     }
 
     pub fn send_alert(&self, alert: Alert) {
@@ -116,6 +156,20 @@ impl WatcherDispatcher {
     pub fn send_metric(&self, metric: Metric) {
         let mut sender = self.metric_tx.clone();
         let _ = sender.try_send(metric);
+    }
+
+    pub fn send_snapshot(&self, snapshot: &String) {
+        let mut sender = self.snapshot_tx.clone();
+        let _ = sender.try_send(snapshot.to_string());
+    }
+
+    pub fn command_get_str(&self, command: &str, args: Vec<&str>) -> Result<String, CommandError> {
+        match self.redis_client {
+            Some(ref client) => {
+                client.lock().unwrap().run_command::<String>(command, args)
+            },
+            None => Err(CommandError { info: simple_redis::types::ErrorInfo::Description("No redis store available") })
+        }
     }
 }
 

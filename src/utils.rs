@@ -29,6 +29,7 @@ use std::error::Error;
 use std::fmt;
 use tokio::timer::delay;
 use chrono::{ prelude::DateTime, Utc};
+use crate::node::{NodeType, HealthCheckType};
 
 pub type JsonMap = Map<String, Value>;
 #[allow(dead_code)]
@@ -142,6 +143,18 @@ pub async fn sleep(sleep_ms: u64) -> AsyncRes {
     Ok(())
 }
 
+macro_rules! show_name {
+    ($type: ty) => {
+        impl fmt::Display for $type {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                write!(f, "{:?}", self)
+            }
+        }
+    }
+}
+
+show_name!(NodeType);
+show_name!(HealthCheckType);
 
 
 

@@ -42,25 +42,12 @@ pub enum NodeType {
     Leaf,
 }
 
-impl fmt::Display for NodeType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
 
 #[derive(Debug)]
 pub enum HealthCheckType {
     Timer,
     Event,
 }
-
-impl fmt::Display for HealthCheckType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
 
 pub type Node = RwLock<NodeProto>;
 pub type NodeStore = HashMap<u64, Arc<Node>>;

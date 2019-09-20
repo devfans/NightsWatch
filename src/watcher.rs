@@ -183,6 +183,24 @@ impl Watcher {
         info!("Loaded snapshot!");
     }
 
+    pub fn load_snapshot_from_dispatcher(&mut self) {
+        match self.dispatcher.command_get_str("LINDEX", vec![REDIS_KEY_SNAPSHOTS, "0"]) {
+            Err(e) => {
+                error!("Failed to load snapshot form redis: {:?}", e);
+            },
+            Ok(ref data) => {
+                match serde_json::from_str::<Value>(data) {
+                    Ok(ref mut raw) => { self.load(raw); },
+                    Err(_) => { error!("Failed to fetch valid snapshot data, got {}", data); },
+                }
+            }
+        }
+    }
+
+    pub fn take_snapshot(&self) {
+        self.dispatcher.send_snapshot(&self.dump().to_string());
+    }
+
     pub fn tick(&mut self, eval: &mut EvalEngineProto) {
         info!("Watcher starts to stare at white walkers");
         let tick: u64;
