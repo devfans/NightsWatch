@@ -134,7 +134,7 @@ impl Maester {
         info!("To dispatch metric to maester: {:?}", data);
     }
 
-    pub fn on_alert(&self, alert: &'_ Alert) {
+    pub fn on_alert(&self, alert: &Alert) {
         self.broadcast(&RavenMessage::NewAlert { data: alert }.to_json());
     }
 

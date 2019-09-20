@@ -357,7 +357,7 @@ impl Wine<Dracarys> for Arc<Ranger> {
     }
 
     fn take_nap(&self) {
-        info!("Ranger lost connection for now!");
+        info!("Ranger lost connection for the moment!");
     }
 
     fn wake_up(&self) -> Self::Stream {
