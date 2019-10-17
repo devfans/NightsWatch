@@ -1,5 +1,5 @@
 # The Night's Watch
-The Night's Watch - A simple but powerful and brave watchdog for your services to make sleep well after you close your eyes!
+The Night's Watch - A simple but powerful and brave watchdog for your services to let you sleep well after you close your eyes!
 
 ```
 "Night gathers, and now my watch begins.
