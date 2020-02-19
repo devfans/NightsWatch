@@ -46,6 +46,7 @@ pub trait JsonParser {
     fn get_u64<I: Index>(&self, index: I, default: u64) -> u64;
     fn get_f64<I: Index>(&self, index: I, default: f64) -> f64;
 }
+
 #[allow(dead_code)]
 #[inline]
 pub fn now() -> u64 {
