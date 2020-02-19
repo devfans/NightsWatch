@@ -147,10 +147,11 @@ pub struct Nightfort {
 
 impl Nightfort {
     pub fn new(watcher: &Arc<Watcher>) -> Nightfort {
+        let listen_bind = watcher.landing.read().unwrap().nightfort_listen_bind.clone();
         let watcher = Arc::downgrade(watcher);
         Nightfort {
             watcher,
-            listen_bind: "0.0.0.0:6000".to_string(),
+            listen_bind,
         }
     }
 
