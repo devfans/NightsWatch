@@ -106,7 +106,7 @@ impl<MessageType: Send + Sync, WineProvider: 'static + Wine<MessageType> + Send 
                         us.wine.take_nap();
                     },
                     Err(e) => {
-                        error!("Failed to connecto to {}, error: {:?}", addr, e);
+                        error!("Failed to connect to {}, error: {:?}", addr, e);
                     },
                 }
             }

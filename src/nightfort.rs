@@ -108,7 +108,7 @@ impl ColdHands {
                         warn!("Failed to get the target node for report {:?}", msg);
                     }
                 } else {
-                    warn!("Ranger tell false tales: {:?}", msg);
+                    warn!("Ranger tells false tales: {:?}", msg);
                 }
             },
             Dracarys::Message { id, ref data } => {
@@ -123,7 +123,7 @@ impl ColdHands {
                             let node = state.read().unwrap();
                             paths = node.get_paths();
                         }
-                    } else { warn!("Ranger tell false tales: {:?}", msg); }
+                    } else { warn!("Ranger tells false tales: {:?}", msg); }
                 }
                 for m in metrics.iter() {
                     if relative {
@@ -181,7 +181,7 @@ impl Nightfort {
     pub async fn process(watcher: Weak<Watcher>, stream: TcpStream, addr: SocketAddr) -> AsyncRes {
         let mut handler = ColdHands::new(watcher);
         let mut stream = Framed::new(stream, DracarysFramer::new());
-        info!("New Ranger connected from: {}", addr);
+        info!("New Ranger get connected from: {}", addr);
 
         loop {
             match stream.next().await {
