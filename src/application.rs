@@ -35,7 +35,7 @@ use crate::alert::Alert;
 pub type Application = RwLock<ApplicationProto>;
 
 pub struct ApplicationProto {
-    health_alarm_threshold: u8,
+    health_alert_threshold: u8,
     root: Weak<Node>,
     nodes_init: bool,  // Flag to re-draw the achitecture of the app
     nodes: Arc<RwLock<NodeQ>>,
@@ -50,7 +50,7 @@ pub struct ApplicationProto {
 impl ApplicationProto {
     pub fn new(store: Arc<Store>, dispatcher: WatcherDispatcher) -> Arc<Application> {
         Arc::new(RwLock::new(ApplicationProto {
-            health_alarm_threshold: 1,
+            health_alert_threshold: 10,
             root: Weak::new(),
             nodes_init: true,
             nodes: Arc::new(RwLock::new(Vec::new())),
@@ -111,7 +111,15 @@ impl ApplicationProto {
                         info!("Evaluating health status for node {} with health script", node.id);
                         eval.eval();
                     } else {
-                        if eval.node.health <= self.health_alarm_threshold {
+                        if let NodeType::Leaf = node.node_type {
+                            if utils::now() > node.health_last_report + node.health_report_threshold as u64 {
+                                eval.node.alert = true;
+                                eval.node.health = 0;
+                            } else {
+                                eval.node.health = node.health_status
+                            }
+                        }
+                        if eval.node.health <= node.health_alert_threshold || eval.node.health <= self.health_alert_threshold {
                             eval.node.alert = true;
                         }
                     }
@@ -234,8 +242,8 @@ impl ApplicationProto {
 
     pub fn parse(&mut self, raw:& Value) {
         let root = self.store.add_app_node(&raw);
-        if let Some(health_alarm_threshold) = raw["health_alarm_threshold"].as_u64() {
-            self.health_alarm_threshold = health_alarm_threshold as u8;
+        if let Some(health_alert_threshold) = raw["health_alert_threshold"].as_u64() {
+            self.health_alert_threshold = health_alert_threshold as u8;
         }
         self.root = Arc::downgrade(&root);
         if let Some(children) = raw["children"].as_object() {
@@ -272,7 +280,7 @@ impl ApplicationProto {
     pub fn serialize(&self) -> Value {
         let root = self.root.upgrade().unwrap().read().unwrap().id;
         json!({
-            "health_alarm_threshold": self.health_alarm_threshold,
+            "health_alert_threshold": self.health_alert_threshold,
             "depth": self.depth,
             "root": root
         })
@@ -290,7 +298,7 @@ impl ApplicationProto {
         let mut tasks = VecDeque::new();
         let mut link_tasks = VecDeque::new();
         let mut app = Self {
-            health_alarm_threshold: raw.get_u64("health_alarm_threshold", 1) as u8,
+            health_alert_threshold: raw.get_u64("health_alarm_threshold", 10) as u8,
             root: Weak::new(),
             nodes_init: true,
             nodes: Arc::new(RwLock::new(Vec::new())),

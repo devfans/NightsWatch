@@ -251,6 +251,9 @@ pub struct NodeProto {
     pub health_last_report: u64,
     pub health_last_change: u64,
 
+    pub health_alert_threshold: u8,
+    pub health_report_threshold: u16,
+
     pub app_meta_map: AppMetaMap,
 }
 
@@ -284,6 +287,8 @@ impl NodeProto {
             health_last_check: 0,
             health_last_report: 0,
             health_last_change: 0,
+            health_alert_threshold: 1,
+            health_report_threshold: 30,
             app_meta_map: HashMap::new(),
 
         }
@@ -327,7 +332,9 @@ impl NodeProto {
             "health_status": self.health_status,
             "health_check_eval": self.health_check_eval,
             "health_check_type": self.health_check_type.to_string(),
-            "health_event_enabled": self.health_event_enabled
+            "health_event_enabled": self.health_event_enabled,
+            "health_alert_threshold": self.health_alert_threshold,
+            "health_report_threshold": self.health_report_threshold
         })
     }
 
@@ -341,6 +348,8 @@ impl NodeProto {
         self.alert_enabled = raw.get_bool("alert_enabled", true);
         self.alert_description = raw.get_str("alert_description", "");
         self.health_event_enabled = raw.get_bool("health_event_enabled", true);
+        self.health_alert_threshold = raw.get_u64("health_alert_threshold", 1) as u8;
+        self.health_report_threshold = raw.get_u64("health_report_threshold", 1) as u16;
         if let Some(script) = raw["health_check_eval"].as_str() {
             self.health_check_eval_override = Some(script.to_string());
         }
@@ -458,6 +467,8 @@ impl StoreOps for Arc<Store> {
             state.alert_enabled = raw.get_bool("alert_enabled", true);
             state.alert_description = raw.get_str("alert_description", "");
             state.health_event_enabled = raw.get_bool("health_event_enabled", true);
+            state.health_alert_threshold = raw.get_u64("health_alert_threshold", 1) as u8;
+            state.health_report_threshold = raw.get_u64("health_report_threshold", 30) as u16;
 
             if let Some(script) = raw["health_check_eval"].as_str() {
                 state.health_check_eval_override = Some(script.to_string());

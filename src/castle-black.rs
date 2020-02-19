@@ -59,7 +59,7 @@ async fn main() -> AsyncRes {
 
     for arg in env::args().skip(1) {
         if arg.starts_with("-c") {
-            conf_path = Some(arg.split_at(14).1.to_string());
+            conf_path = Some(arg.split_at(3).1.to_string());
         }
     }
 
