@@ -156,23 +156,23 @@ impl WatcherDispatcher {
     }
 
     pub fn send_alert(&self, alert: Alert) {
-        let mut sender = self.alert_tx.clone();
-        let _ = sender.try_send(alert);
+        let sender = self.alert_tx.clone();
+        let _ = sender.send(alert);
     }
 
     pub fn send_event(&self, event: Event) {
-        let mut sender = self.event_tx.clone();
-        let _ = sender.try_send(event);
+        let sender = self.event_tx.clone();
+        let _ = sender.send(event);
     }
 
     pub fn send_metric(&self, metric: Metric) {
-        let mut sender = self.metric_tx.clone();
-        let _ = sender.try_send(metric);
+        let sender = self.metric_tx.clone();
+        let _ = sender.send(metric);
     }
 
     pub fn send_snapshot(&self, snapshot: &String) {
-        let mut sender = self.snapshot_tx.clone();
-        let _ = sender.try_send(snapshot.to_string());
+        let sender = self.snapshot_tx.clone();
+        let _ = sender.send(snapshot.to_string());
     }
 
     pub fn command_get_str(&self, command: &str, args: Vec<&str>) -> Result<String, CommandError> {

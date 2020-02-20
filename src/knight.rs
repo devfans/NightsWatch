@@ -21,10 +21,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use tokio::{codec, sync::mpsc, timer::delay, net::TcpStream, codec::{FramedRead, FramedWrite, Framed} };
-use std::{io, marker, net::{SocketAddr, ToSocketAddrs}, time::{Duration, Instant}, marker::Unpin, sync::{Arc, Mutex}};
+use tokio::{net::TcpStream };
+use tokio_util::codec::{ self, FramedRead, FramedWrite };
+use std::{io, marker, net::{SocketAddr, ToSocketAddrs}, marker::Unpin, sync::Arc };
 use crate::utils::AsyncRes;
-use futures::{StreamExt, Stream, Sink, SinkExt};
+use futures::{Stream, join, SinkExt, StreamExt};
 
 
 pub trait Wine<MessageType> {
@@ -60,7 +61,7 @@ impl<MessageType: Send + Sync, WineProvider: 'static + Wine<MessageType> + Send 
             if let Some(addr) = target {
                 info!("Connecting to remote target: {}", addr);
                 match TcpStream::connect(&addr).await {
-                    Ok(stream) => {
+                    Ok(mut stream) => {
                         let (r, w) = stream.split();
                         let mut messenger = us.wine.wake_up();
                         // let mut stream = Framed::new(stream, self.wine.get_framer());
@@ -72,38 +73,37 @@ impl<MessageType: Send + Sync, WineProvider: 'static + Wine<MessageType> + Send 
                         // self.rx.forward(stream);
                         info!("Connected to {}", addr);
                         let handler = us.clone();
-                        tokio::spawn( async move {
-                            loop {
-                                match rx.next().await {
-                                    Some(Ok(msg)) => { handler.wine.drink(msg); },
-                                    _ => { 
-                                        warn!("Potential disconnection from remote side");
-                                        break;
-                                    },
-                                }
-                            }
-                        });
-                        /* match tx.send_all(&mut updates).await {
-                            _ => { warn!("Potential disconnection"); },
-                        }
-                        */
-                        loop {
-                            match messenger.next().await {
-                                Some(msg) => {
-                                    match tx.send(msg).await {
-                                        Ok(_) => {
-                                            // info!("Message sent");
-                                        }
-                                        Err(e) => {
-                                            error!("Connection broken! error: {:?}", e);
+                        join!(async move {
+                                loop {
+                                    match rx.next().await {
+                                        Some(Ok(msg)) => { handler.wine.drink(msg); },
+                                        _ => {
+                                            warn!("Potential disconnection from remote side");
                                             break;
                                         },
                                     }
-                                },
-                                _ => { panic!("Unexpected message null"); },
+                                }
+                            },
+                            async {
+                                loop {
+                                    match messenger.next().await {
+                                        Some(msg) => {
+                                            match tx.send(msg).await {
+                                                Ok(_) => {
+                                                    // info!("Message sent");
+                                                }
+                                                Err(e) => {
+                                                    error!("Connection broken! error: {}", e);
+                                                    break;
+                                                },
+                                            }
+                                        },
+                                        _ => { break; },
+                                    }
+                                }
+                                us.wine.take_nap();
                             }
-                        }
-                        us.wine.take_nap();
+                        );
                     },
                     Err(e) => {
                         error!("Failed to connect to {}, error: {:?}", addr, e);
@@ -116,7 +116,7 @@ impl<MessageType: Send + Sync, WineProvider: 'static + Wine<MessageType> + Send 
             } else {
                 warn!("Disconnected from target address, will reconnect again after one second");
             }
-            delay(Instant::now() + Duration::from_secs(1)).await;
+            sleep!(1000);
         }
     }
 

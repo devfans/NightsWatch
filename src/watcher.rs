@@ -24,17 +24,14 @@ SOFTWARE.
 
 use std::sync::{Arc, RwLock, Weak};
 use crate::application::*; 
-use serde_json::{map::Map, Value};
+use serde_json::Value;
 use crate::node::*;
 use crate::utils;
 use crate::landing::Landing;
 use std::collections::HashMap;
 use std::error::Error;
-use std::time::{Instant, Duration};
-use tokio::timer::delay;
 use crate::eval::*;
 use crate::dispatcher::*;
-use futures::{StreamExt, Stream, Sink, SinkExt};
 use crate::maester::Maester;
 
 pub struct WatcherState {
@@ -156,7 +153,7 @@ impl Watcher {
             }
             let sleep_ms = (last_tick + interval) as i64 - utils::now() as i64 * 1000;
             if sleep_ms > 0 {
-                delay(Instant::now() + Duration::from_millis(sleep_ms as u64)).await;
+                sleep!(sleep_ms as u64);
             }
             self.tick(&mut engine);
             // info!("{}", self.dump().to_string());

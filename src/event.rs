@@ -24,7 +24,6 @@ SOFTWARE.
 use std::sync::Weak;
 use crate::node::*;
 use serde_json::Value;
-use std::fmt;
 
 #[derive(Debug)]
 #[derive(Clone)]

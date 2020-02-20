@@ -22,8 +22,8 @@ SOFTWARE.
 */
 
 use bytes;
-use bytes::BufMut;
-use tokio::codec;
+use bytes::{Buf, BufMut};
+use tokio_util::codec;
 use std::io;
 
 use crate::utils;

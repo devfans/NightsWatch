@@ -23,6 +23,7 @@ SOFTWARE.
 
 #[macro_use] extern crate serde_json;
 #[macro_use] extern crate log;
+#[macro_use] mod utils;
 use env_logger;
 
 use std::env;
@@ -35,7 +36,6 @@ mod watcher;
 mod node;
 mod metric;
 mod event;
-mod utils;
 mod alert;
 mod dracarys;
 mod maester;

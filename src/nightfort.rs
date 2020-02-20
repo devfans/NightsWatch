@@ -26,18 +26,15 @@ use crate::watcher::*;
 use crate::utils::{self, AsyncRes};
 use tokio::{
     self,
-    codec::Framed,
     net::{TcpListener, TcpStream},
 };
+use tokio_util::codec::Framed;
 use std::net::SocketAddr;
 use crate::node::*;
-use crate::metric::Metric;
 use std::collections::HashMap;
 use crate::dracarys::{Dracarys, DracarysFramer};
 use futures::{StreamExt};
 use serde_json::{self, json};
-use std::time::{Duration, Instant};
-use tokio::timer::delay;
 
 struct ColdHands {
     hands: HashMap<u16, Weak<Node>>,
@@ -86,7 +83,7 @@ impl ColdHands {
                         }
                         locker.unlock().await?;
                     } else if !failed_path.is_empty() {
-                        delay(Instant::now() + Duration::from_millis(200)).await;
+                        sleep!(200);
                         leaf = watcher.locate_node(&failed_path);
                     }
                 }

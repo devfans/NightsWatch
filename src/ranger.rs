@@ -29,9 +29,8 @@ use crate::dracarys::{Dracarys, DracarysFramer};
 use tokio::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use crate::utils;
-use tokio::timer::delay;
 use std::time::{Duration, Instant};
-use tokio_net::process::Command;
+use tokio::process::Command;
 // Sample configuration
 //
 // nightfort: 127.0.0.1:6000
@@ -283,7 +282,7 @@ impl Ranger {
     pub fn watch_target(target: Arc<Target>, mut messenger: Messenger) {
         tokio::spawn(async move {
             // Send target info
-            let _ = messenger.try_send(Dracarys::Target {
+            let _ = messenger.send(Dracarys::Target {
                 id: target.id,
                 name: target.name.clone(),
                 paths: target.paths.clone(),
@@ -299,7 +298,7 @@ impl Ranger {
             loop {
                 let sleep_s = (last_check + interval) as i64 - utils::now() as i64;
                 if sleep_s > 0 {
-                    delay(Instant::now() + Duration::from_millis(1000 * sleep_s as u64)).await;
+                    sleep!(1000 * sleep_s as u64);
                 }
                 last_check = utils::now();
                 let mut metrics = Vec::new();
@@ -316,7 +315,7 @@ impl Ranger {
                                 }
                             }
                             // Send report
-                            let _ = messenger.try_send(Dracarys::Report {
+                            let _ = messenger.send(Dracarys::Report {
                                 id: target.id,
                                 health_status,
                             });
@@ -328,7 +327,7 @@ impl Ranger {
                             for m in metrics.iter() {
                                 data.push((m.0.clone(), m.1.clone(), now));
                             }
-                            let _ = messenger.try_send(Dracarys::Metric {
+                            let _ = messenger.send(Dracarys::Metric {
                                 id: target.id,
                                 relative: target.relative_metric_path,
                                 metrics: data,

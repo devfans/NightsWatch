@@ -29,7 +29,6 @@ use crate::utils::*;
 use crate::utils::{self, AsyncRes};
 use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
-use tokio::timer::delay;
 use std::time::{Instant, Duration};
 use crate::eval::*;
 
@@ -122,7 +121,7 @@ impl NodeHodor {
     pub async fn try_get_locked(&self, locked: &mut bool, failed_path: &mut String, sleep_ms: u64) -> AsyncRes {
         self.try_lock(locked, failed_path).await?;
         if !*locked {
-            delay(Instant::now() + Duration::from_millis(sleep_ms as u64)).await;
+            sleep!(sleep_ms);
         }
         self.try_lock(locked, failed_path).await?;
         Ok(())

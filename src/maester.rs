@@ -21,18 +21,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use std::sync::{Arc, Weak, RwLock};
+use std::sync::{Arc, RwLock};
 use crate::watcher::Watcher;
 use ws::{listen, Handler, Sender, Result, Message, CloseCode, Error, Handshake};
 use std::collections::HashMap;
 use std::fmt;
-use serde_json::{self, Value};
 
 use crate::event::Event;
 use crate::alert::Alert;
 use crate::raven::RavenMessage;
 
-use crate::utils::{self, AsyncRes};
+use crate::utils::AsyncRes;
 
 struct MaesterSession<'a> {
     id: u64,

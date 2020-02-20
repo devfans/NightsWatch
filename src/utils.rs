@@ -27,7 +27,6 @@ use serde_json::map::Map;
 use serde_json::value::Index;
 use std::error::Error;
 use std::fmt;
-use tokio::timer::delay;
 use chrono::{ prelude::DateTime, Utc};
 use crate::node::{NodeType, HealthCheckType};
 use crate::event::{Event, EventType};
@@ -132,20 +131,21 @@ pub fn get_u64_le(v: &[u8]) -> u64 {
 #[derive(Debug)]
 pub struct CodecError;
 impl fmt::Display for CodecError {
-	fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-		fmt.write_str("Bad data")
-	}
+        fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+                fmt.write_str("Bad data")
+        }
 }
 impl Error for CodecError {
-	fn description(&self) -> &str {
-		"Bad data"
-	}
+        fn description(&self) -> &str {
+                "Bad data"
+        }
 }
 
-#[allow(dead_code)]
-pub async fn sleep(sleep_ms: u64) -> AsyncRes {
-    delay(Instant::now() + Duration::from_millis(sleep_ms)).await;
-    Ok(())
+#[macro_export]
+macro_rules! sleep {
+    ($duration: expr) => {
+        tokio::time::delay_for(std::time::Duration::from_millis($duration)).await
+    }
 }
 
 macro_rules! impl_show_name {
