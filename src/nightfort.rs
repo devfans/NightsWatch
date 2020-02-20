@@ -169,13 +169,20 @@ impl Nightfort {
         let mut listener = TcpListener::bind(&addr).await?;
         info!("Nightfort listening on {}", addr);
         loop {
-            let (stream, addr) = listener.accept().await?;
-            let watcher = self.watcher.clone();
-            tokio::spawn(async move {
-                if let Err(e) = Nightfort::process(watcher, stream, addr).await {
-                    error!("Error on this ranger: {}, error: {:?}", addr, e);
-                }
-            });
+            match listener.accept().await {
+                Ok((stream, addr)) => {
+                    let watcher = self.watcher.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = Nightfort::process(watcher, stream, addr).await {
+                            error!("Error on this ranger: {}, error: {:?}", addr, e);
+                        }
+                    });
+
+                },
+                Err(e) => error!("Socket conn error {}", e),
+            }
+
+            // let (stream, addr) = listener.accept().await?;
         }
     }
 
