@@ -35,6 +35,7 @@ pub struct Alert {
     pub path: String,
     pub timestamp: u64,
     pub severity: u8,
+    pub status: u8,
     pub description: String,
 }
 
@@ -46,6 +47,7 @@ impl From<&Alert> for Value {
             "path": a.path,
             "time": a.timestamp,
             "severity": a.severity,
+            "status": a.status,
             "description": a.description 
         })
     }

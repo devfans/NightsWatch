@@ -273,7 +273,7 @@ impl NodeProto {
 
             alert_enabled: true,
             alert_description: String::new(),
-            health_status: 0,
+            health_status: 255,
             health_check_eval: None,
             health_check_eval_override: None,
             health_check_eval_change: 0,

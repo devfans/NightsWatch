@@ -137,6 +137,7 @@ impl ApplicationProto {
                             path: app_meta.path.read(),
                             timestamp: utils::now(),
                             severity: eval.node.severity,
+                            status: node.health_status,
                             description: node.alert_description.clone(),
                         });
                     }
