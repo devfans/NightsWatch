@@ -284,7 +284,7 @@ impl NodeProto {
 
             health_check_tick: 0,
             health_last_check: 0,
-            health_last_report: 0,
+            health_last_report: utils::now(),
             health_last_change: 0,
             health_alert_threshold: 1,
             health_report_threshold: 30,
